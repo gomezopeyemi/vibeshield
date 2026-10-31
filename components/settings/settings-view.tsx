@@ -1,0 +1,150 @@
+"use client";
+
+import { useState } from "react";
+import { cn } from "@/lib/utils";
+import { useSession } from "@/components/providers";
+import { PLANS, PLAN_RANK } from "@/lib/constants";
+import type { PlanTier } from "@/lib/types";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Icon } from "@/components/ui/icon";
+import { Badge } from "@/components/ui/badge";
+import { Avatar } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
+
+export function SettingsView() {
+  const { user, workspace, plan } = useSession();
+  const [note, setNote] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-6">
+      {/* Account */}
+      <Section title="Account" description="Your personal profile.">
+        <div className="flex items-center gap-4">
+          <Avatar name={user.name} size={56} />
+          <div className="grid flex-1 gap-3 sm:grid-cols-2">
+            <Field label="Name"><Input defaultValue={user.name} /></Field>
+            <Field label="Email"><Input defaultValue={user.email} /></Field>
+          </div>
+        </div>
+      </Section>
+
+      {/* Workspace */}
+      <Section title="Workspace" description="Settings for the current workspace.">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="Workspace name"><Input defaultValue={workspace.name} /></Field>
+          <Field label="Slug"><Input defaultValue={workspace.slug} /></Field>
+          <Field label="Environment"><Input defaultValue={workspace.environment} disabled /></Field>
+        </div>
+      </Section>
+
+      {/* Billing */}
+      <Section title="Plan & billing" description="Entitlements are enforced server-side. Upgrade to unlock more modules.">
+        <div className="grid gap-3 lg:grid-cols-4">
+          {PLANS.map((p) => {
+            const isCurrent = p.tier === plan;
+            const higher = PLAN_RANK[p.tier] > PLAN_RANK[plan];
+            return (
+              <div
+                key={p.tier}
+                className={cn(
+                  "flex flex-col rounded-[12px] border p-4",
+                  isCurrent ? "border-brand bg-brand-soft/30 ring-1 ring-brand/20" : "border-line bg-surface",
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-[13px] font-semibold text-ink">{p.name}</p>
+                  {isCurrent && <Badge tone="brand" size="sm">Current</Badge>}
+                </div>
+                <p className="mt-1 text-[18px] font-semibold text-ink">{p.priceLabel}</p>
+                <p className="text-[11.5px] text-muted">{p.tagline}</p>
+                <ul className="mt-3 flex-1 space-y-1.5">
+                  {p.features.slice(0, 5).map((f) => (
+                    <li key={f} className="flex items-start gap-1.5 text-[11.5px] text-ink-2">
+                      <Icon name="Check" className="mt-0.5 size-3 shrink-0 text-success" /> {f}
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  size="sm"
+                  variant={isCurrent ? "secondary" : higher ? "primary" : "ghost"}
+                  disabled={isCurrent}
+                  className="mt-3"
+                  onClick={() => setNote(`Billing isn't connected in this environment — ${higher ? "upgrade" : "change"} to ${p.name} requires a connected billing backend. Nothing was charged.`)}
+                >
+                  {isCurrent ? "Current plan" : higher ? "Upgrade" : "Switch"}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+        {note && (
+          <div className="mt-3 flex items-start gap-2 rounded-[9px] border border-line bg-surface-2/60 px-3 py-2">
+            <Icon name="Info" className="mt-0.5 size-3.5 shrink-0 text-muted" />
+            <p className="text-[12px] text-muted">{note}</p>
+          </div>
+        )}
+      </Section>
+
+      {/* Entitlements */}
+      <Section title="Entitlements" description={`What the ${PLANS.find((p) => p.tier === plan)?.name} plan includes.`}>
+        <div className="flex flex-wrap gap-1.5">
+          {(PLANS.find((p) => p.tier === plan)?.entitlements ?? []).map((e) => (
+            <Badge key={e} tone="neutral" size="md" className="font-mono">{e}</Badge>
+          ))}
+        </div>
+      </Section>
+
+      {/* Team */}
+      <Section title="Team" description={`${workspace.memberCount} member${workspace.memberCount === 1 ? "" : "s"} in this workspace.`}>
+        <div className="space-y-2">
+          {[{ n: user.name, e: user.email, r: "Owner" }, { n: "Sam Rivera", e: "sam@alex-tech.app", r: "Member" }].slice(0, workspace.memberCount).map((m) => (
+            <div key={m.e} className="flex items-center gap-3 rounded-[9px] border border-line bg-surface p-3">
+              <Avatar name={m.n} size={32} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[12.5px] font-medium text-ink">{m.n}</p>
+                <p className="truncate text-[11px] text-faint">{m.e}</p>
+              </div>
+              <Badge tone="muted" size="sm">{m.r}</Badge>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* Danger */}
+      <Card className="border-critical-soft p-5">
+        <h3 className="text-[13px] font-semibold text-critical-ink">Danger zone</h3>
+        <Separator className="my-3 bg-critical-soft" />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-[12.5px] font-medium text-ink">Delete workspace</p>
+            <p className="text-[11.5px] text-muted">Permanently removes this workspace and all its scans.</p>
+          </div>
+          <Button variant="danger-soft" size="sm" onClick={() => setNote("Deleting a workspace requires a connected backend and an explicit confirmation step. Nothing was deleted.")}>
+            <Icon name="AlertTriangle" /> Delete workspace
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+  return (
+    <Card className="p-5">
+      <h2 className="text-[14px] font-semibold text-ink">{title}</h2>
+      {description && <p className="mt-0.5 text-[12.5px] text-muted">{description}</p>}
+      <div className="mt-4">{children}</div>
+    </Card>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11.5px] font-medium text-muted">{label}</span>
+      {children}
+    </label>
+  );
+}

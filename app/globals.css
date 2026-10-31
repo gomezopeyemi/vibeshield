@@ -1,0 +1,270 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   VibeShield design tokens — light-first, premium developer infrastructure.
+   Palette is intentionally restrained: white + neutral grey + dark ink type
+   + a single restrained blue accent. Green / amber / coral communicate status
+   only. Dark surfaces are reserved for code & terminal inspection areas.
+   NO purple as a brand colour anywhere.
+   ========================================================================== */
+
+:root {
+  /* Surfaces */
+  --canvas: #f7f8fa;
+  --surface: #ffffff;
+  --surface-2: #f1f3f6;
+  --surface-3: #e9edf3;
+
+  /* Text */
+  --ink: #171b24;
+  --ink-2: #3a4252;
+  --muted: #667085;
+  --faint: #98a2b3;
+
+  /* Lines */
+  --line: #e5e8ee;
+  --line-strong: #d6dbe4;
+
+  /* Brand — restrained blue */
+  --brand: #3169d8;
+  --brand-ink: #2550a8;
+  --brand-strong: #1f4590;
+  --brand-soft: #eaf0fc;
+  --brand-soft-2: #dbe6fa;
+
+  /* Status */
+  --success: #24966b;
+  --success-soft: #e4f3ec;
+  --success-ink: #1a6e4f;
+  --warning: #d49a36;
+  --warning-soft: #fbf1dd;
+  --warning-ink: #9a6d1c;
+  --critical: #d95c55;
+  --critical-soft: #fbe7e5;
+  --critical-ink: #a63a34;
+  --info: #3169d8;
+  --info-soft: #eaf0fc;
+
+  /* Dark code / terminal surfaces */
+  --code-bg: #0e1320;
+  --code-bg-2: #151c2c;
+  --code-line: #222b3d;
+  --code-text: #c9d3e3;
+  --code-muted: #6b7890;
+  --code-gutter: #4a5468;
+
+  /* Effects */
+  --ring: #3169d8;
+  --shadow-sm: 0 1px 2px 0 rgb(16 24 40 / 0.04);
+  --shadow: 0 1px 3px 0 rgb(16 24 40 / 0.06), 0 1px 2px -1px rgb(16 24 40 / 0.04);
+  --shadow-md: 0 4px 12px -2px rgb(16 24 40 / 0.08), 0 2px 6px -2px rgb(16 24 40 / 0.05);
+  --shadow-lg: 0 12px 32px -8px rgb(16 24 40 / 0.14), 0 4px 10px -4px rgb(16 24 40 / 0.08);
+
+  --radius: 12px;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-soft-2: var(--brand-soft-2);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-ink: var(--success-ink);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-ink: var(--warning-ink);
+  --color-critical: var(--critical);
+  --color-critical-soft: var(--critical-soft);
+  --color-critical-ink: var(--critical-ink);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --color-code-bg: var(--code-bg);
+  --color-code-bg-2: var(--code-bg-2);
+  --color-code-line: var(--code-line);
+  --color-code-text: var(--code-text);
+  --color-code-muted: var(--code-muted);
+  --color-code-gutter: var(--code-gutter);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, Consolas,
+    monospace;
+
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+
+  --shadow-card: var(--shadow);
+  --shadow-pop: var(--shadow-md);
+  --shadow-float: var(--shadow-lg);
+
+  --breakpoint-xs: 26rem;
+}
+
+* {
+  border-color: var(--line);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Typographic rhythm */
+h1, h2, h3, h4, h5 {
+  letter-spacing: -0.012em;
+}
+
+::selection {
+  background: var(--brand-soft-2);
+  color: var(--brand-strong);
+}
+
+/* Refined scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--faint);
+  background-clip: content-box;
+}
+/* Dark scrollbars inside code surfaces */
+.scroll-dark {
+  scrollbar-color: var(--code-line) transparent;
+}
+.scroll-dark::-webkit-scrollbar-thumb {
+  background: var(--code-line);
+  background-clip: content-box;
+}
+
+/* Focus visibility — accessible, restrained */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@layer utilities {
+  .font-mono {
+    font-family: var(--font-mono);
+    font-feature-settings: "liga" 0;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .grid-dots {
+    background-image: radial-gradient(var(--line-strong) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Motion: respect reduced-motion globally */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Keyframes used by status indicators */
+@keyframes vs-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@keyframes vs-ping {
+  75%, 100% { transform: scale(2.1); opacity: 0; }
+}
+@keyframes vs-shimmer {
+  100% { transform: translateX(100%); }
+}
+.animate-vs-pulse { animation: vs-pulse 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 0.55),
+    transparent
+  );
+  animation: vs-shimmer 1.5s infinite;
+}
+
+/* Radix overlay / popover / dialog / drawer entrance animations */
+@keyframes vs-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes vs-pop-in {
+  from { opacity: 0; transform: translateY(2px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes vs-slide-right {
+  from { opacity: 0.4; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes vs-dialog-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.vs-overlay[data-state="open"] { animation: vs-fade-in 0.18s ease; }
+.vs-pop[data-state="open"],
+.vs-pop[data-state="delayed-open"] { animation: vs-pop-in 0.14s ease; }
+.vs-dialog[data-state="open"] { animation: vs-dialog-in 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+.vs-drawer[data-state="open"] { animation: vs-slide-right 0.26s cubic-bezier(0.16, 1, 0.3, 1); }
