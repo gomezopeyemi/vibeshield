@@ -1,5 +1,6 @@
 import "server-only";
 import { LIVE_MODE, DEMO_ALLOWED, isConnected } from "./config";
+import { requireUser } from "./auth/session";
 import { formatTime } from "./utils";
 import type {
   DataEnvelope,
@@ -20,6 +21,7 @@ import type {
   ContextAnalysis,
   MCPConnection,
   LegalDocState,
+  SessionUser,
 } from "./types";
 
 import {
@@ -84,72 +86,80 @@ function unavailable<T>(data: T, note: string): DataEnvelope<T> {
   return { origin: "unavailable", data, note };
 }
 
-/** Demo fixtures are served only in development/demo deployments, only when
- * live mode is off, and never beside real scan data. */
-async function demoServable(): Promise<boolean> {
-  if (!DEMO_ALLOWED || LIVE_MODE) return false;
-  return (await listRuns()).length === 0;
+/** Demo fixtures go only to the fixture session (auth not configured) in a
+ * development/demo deployment with live mode off, and never beside real scans.
+ * Real accounts always get their own data or an honest empty state. */
+async function demoServable(user: SessionUser): Promise<boolean> {
+  if (!user.demo || !DEMO_ALLOWED || LIVE_MODE) return false;
+  return (await listRuns(user.id)).length === 0;
 }
 
 export async function getReadiness(): Promise<DataEnvelope<ReadinessState>> {
-  const live = readinessFromRuns(await listRuns());
+  const user = await requireUser();
+  const live = readinessFromRuns(await listRuns(user.id));
   if (live) {
     return { origin: "live", data: live, lastUpdatedAt: formatTime(live.lastScanAt!), note: storeNote() };
   }
-  if (!(await demoServable())) {
+  if (!(await demoServable(user))) {
     return unavailable(emptyReadiness(), "No completed scan yet. Run a scan to compute your Launch Readiness Score.");
   }
   return demo(DEMO_READINESS, formatTime(DEMO_READINESS.lastScanAt!));
 }
 
 export async function getFindings(): Promise<DataEnvelope<Finding[]>> {
-  const live = findingsFromRuns(await listRuns());
+  const user = await requireUser();
+  const live = findingsFromRuns(await listRuns(user.id));
   if (live.length > 0) {
     return { origin: "live", data: live };
   }
-  if (!(await demoServable())) {
+  if (!(await demoServable(user))) {
     return unavailable([], "No findings yet. Run a scan to see results.");
   }
   return demo(DEMO_FINDINGS);
 }
 
 export async function getFinding(id: string): Promise<Finding | null> {
-  const live = findingsFromRuns(await listRuns()).find((f) => f.id === id);
+  const user = await requireUser();
+  const live = findingsFromRuns(await listRuns(user.id)).find((f) => f.id === id);
   if (live) return live;
-  return (await demoServable()) ? (DEMO_FINDINGS.find((f) => f.id === id) ?? null) : null;
+  return (await demoServable(user)) ? (DEMO_FINDINGS.find((f) => f.id === id) ?? null) : null;
 }
 
 export async function getScans(): Promise<DataEnvelope<Scan[]>> {
-  const runs = await listRuns();
+  const user = await requireUser();
+  const runs = await listRuns(user.id);
   if (runs.length > 0) {
     return { origin: "live", data: runs.map(resultToScan), note: storeNote() };
   }
-  if (!(await demoServable())) {
+  if (!(await demoServable(user))) {
     return unavailable([], "No scans yet. Run your first scan.");
   }
   return demo(DEMO_SCANS);
 }
 
 export async function getScanEvents(scanId: string): Promise<DataEnvelope<ScanEvent[]>> {
-  const run = await getRun(scanId);
+  const user = await requireUser();
+  const run = await getRun(scanId, user.id);
   if (run) return { origin: "live", data: run.events };
-  if (!(await demoServable())) {
+  if (!(await demoServable(user))) {
     return unavailable([], "Events for this scan are not available.");
   }
   return demo(DEMO_SCAN_EVENTS.filter((e) => e.scanId === scanId || scanId === "scan_latest"));
 }
 
 export async function getPullRequests(): Promise<DataEnvelope<PullRequest[]>> {
+  const user = await requireUser();
   // No PR backend exists yet, so real PRs are never available; fixtures only in a demo-only context.
-  if (!(await demoServable())) {
+  if (!(await demoServable(user))) {
     return unavailable([], "Remediation PRs require the GitHub App, which is not connected yet.");
   }
   return demo(DEMO_PULL_REQUESTS);
 }
 
 export async function getVerification(): Promise<DataEnvelope<VerificationBadge>> {
+  const user = await requireUser();
   // "Verified" needs a clean verification scan after merged fixes — not built yet, so never claim it.
-  if (!(await demoServable())) {
+  if (!(await demoServable(user))) {
     return unavailable(
       { state: "unverified" },
       "Verification needs a clean re-scan after fixes are merged. This is not available yet.",
@@ -159,9 +169,10 @@ export async function getVerification(): Promise<DataEnvelope<VerificationBadge>
 }
 
 export async function getIntegrations(): Promise<DataEnvelope<Integration[]>> {
-  // Integration status is inherently about real connections — in live mode we
-  // report the actual credential state rather than demo fixtures.
-  if (LIVE_MODE || !DEMO_ALLOWED) {
+  const user = await requireUser();
+  // Integration status is inherently about real connections — outside the
+  // fixture session we report the actual (disconnected) state.
+  if (!user.demo || LIVE_MODE || !DEMO_ALLOWED) {
     const live: Integration[] = DEMO_INTEGRATIONS.map((i) => ({
       ...i,
       status: "disconnected",
@@ -184,6 +195,7 @@ export interface FinOpsData {
 }
 
 export async function getFinOps(): Promise<DataEnvelope<FinOpsData>> {
+  await requireUser();
   const usageConnected = isConnected("upstash"); // spend telemetry source
   return demo(
     {
@@ -205,6 +217,7 @@ export interface DatabaseData {
 }
 
 export async function getDatabase(): Promise<DataEnvelope<DatabaseData>> {
+  await requireUser();
   if (LIVE_MODE && !isConnected("supabase")) {
     return unavailable(
       { tables: [], stripeEndpoint: DEMO_STRIPE_ENDPOINT, stripeFlow: [] },
@@ -228,6 +241,7 @@ export interface ContextSyncData {
 }
 
 export async function getTestingAndContext(): Promise<DataEnvelope<ContextSyncData>> {
+  await requireUser();
   return demo({
     smokeCurrent: DEMO_SMOKE_RUN,
     smokeHistory: DEMO_SMOKE_HISTORY,

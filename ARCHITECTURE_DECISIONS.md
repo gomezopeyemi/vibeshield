@@ -5,7 +5,9 @@ Status key: **Accepted** (go ahead) · **Proposed** (needs your confirmation) ·
 ## ADR-001 — Keep the Next.js 16 app; add a separate worker later — Accepted
 The UI and API layer stay in the existing Next app. Scanning moves out of the web process into isolated workers in Stage 4. Until then the in-process regex scanner remains but is labelled for what it is (ADR-007).
 
-## ADR-002 — Dedicated Supabase project for VibeShield — **Open (blocks Stage 1)**
+## ADR-002 — Dedicated Supabase project for VibeShield — **Accepted (2026-10-31)**
+Decision: the founder creates a dedicated VibeShield project and supplies its keys via `.env.local`; Claude never handles the keys. The existing project stays untouched.
+
 `kowvnkydqqiaezqqejfr` already hosts an unrelated interior-design marketplace (tables `designers`, `projects`, `conversations`, `messages`, `consultations`, plus `profiles`/`notifications`). Putting VibeShield's auth users, workspaces and RLS there would share `auth.users` and migration history between two products and collide on table names.
 **Recommendation:** create a new Supabase project for VibeShield (dev), later a second one for production; leave the existing project untouched. Alternative: reuse it under a dedicated schema (`vibeshield`) — workable but `auth.users` would still be shared.
 
@@ -14,6 +16,10 @@ The UI and API layer stay in the existing Next app. Scanning moves out of the we
 - Route gating in **`proxy.ts`** (Next 16 renamed `middleware`; verified in `node_modules/next/dist/docs/.../version-16.md`), used for redirects only.
 - Real authorization is enforced again in a server-side data-access layer and in RLS — `proxy.ts` is never the only check.
 - GitHub sign-in (identity) stays separate from the GitHub App installation (repo access).
+- Implemented in Stage 1: the DAL (`lib/auth/session.ts`) uses `auth.getUser()` (asks the Auth server, so revoked users are caught) and requires `email_confirmed_at`; `proxy.ts` uses `getClaims()` for the fast optimistic redirect. `connection()` keeps identity out of prerendered pages.
+- Without public Supabase env vars: `development`/`demo` run on a labelled demo session; `staging`/`production` fail closed (redirect to `/login`, API 503 `auth_not_configured`).
+- Public env vars are inlined at build time, so they must be present when the app is built (e.g. in Vercel's build environment).
+- Until Stage 2 tables exist, scans are scoped by `owner_id` = the auth user id (in memory and in the legacy store).
 
 ## ADR-004 — Tenancy: `workspace_id` on every owned table, RLS via helper functions — Accepted
 - Roles: owner / admin / developer / viewer in `workspace_members`.
@@ -49,3 +55,7 @@ Add Vitest for unit tests (scanner rules, scoring, diff, zod routes) and a SQL/R
 1. Brand, pricing and plan contents follow the roadmap §13; Team limits are not invented.
 2. The roadmap's table list is a menu, not a mandate — tables are added in the stage that needs them.
 3. Everything ships to a staging environment before production.
+
+
+
+

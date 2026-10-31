@@ -6,7 +6,63 @@ _Stage 2: a **real static-analysis scanner** that runs on real source files and
 **streams real findings live** into the theater; the dashboard, score and fix
 queue are now driven by real scanner output._
 
-**Gates (2026-10-31, after Stage 0.5):** `npm run typecheck` ✓ · `npm run lint` ✓ 0 errors / 0 warnings · `npm test` ✓ 23 tests (4 files) · `npm run build` ✓. All four must stay green.
+**Gates (2026-10-31, after Stage 1):** `npm run typecheck` ✓ · `npm run lint` ✓ 0 errors / 0 warnings · `npm test` ✓ 68 tests (8 files) · `npm run build` ✓. All four must stay green.
+
+## Stage 1 — Public site & authentication (CODE COMPLETE, 2026-10-31 · live verification pending)
+
+**Not "done" until the live journey below passes against the real VibeShield Supabase project.** No keys were available this session (by decision ADR-002 the founder creates the project and owns the keys).
+
+**Built**
+- **Public site** `app/(marketing)`: `/` landing, `/features`, `/pricing`, `/terms`, `/privacy`. Every capability carries a status (Available / Preview / In development) from one source, `lib/marketing.ts`. Paid plans show "Coming soon" (disabled, no fake checkout). Terms/Privacy are marked **Draft — pending legal review**; contact details are not published yet. `app/page.tsx` (redirect to `/overview`) was removed.
+- **Auth pages** `app/(auth)`: `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/verify-email`; `app/auth/confirm` handles email links (token_hash and PKCE code). Forms use Server Actions + `useActionState`, zod validation, field errors, pending states.
+- **Server Actions** `lib/auth/actions.ts`: sign up (with email verification), sign in (safe `next`), resend verification, request reset, update password, sign out. Generic messages for bad credentials; identical replies for reset/resend whether or not the account exists; rate-limit and **service-outage** messages are distinct from credential errors.
+- **Session layer** `lib/auth/session.ts` (DAL): `getSession` (Auth server `getUser`, requires verified email, `connection()` so identity is never prerendered), `requireUser` (pages/data), `requireApiUser` (routes → 401/503 JSON).
+- **`proxy.ts`**: session refresh + optimistic redirect; **default-deny** (every non-public path needs a session; `next` param preserved; open-redirect guard `safeNext`).
+- **Enforcement**: all 11 data-layer getters, the 3 scans pages, the `(app)` layout and **all 8 API routes** check the session. Scans are now **owned** (`owner_id` = auth user id): one account cannot list, open, diff or read events of another's scans.
+- **Shell**: real name/email in the topbar and Settings; working Sign out; real accounts get a placeholder "Personal" workspace with no repositories (no fixtures). "New workspace" is disabled until Stage 2. A visible banner marks the demo session.
+- **Config safety**: a secret / service-role key placed in `NEXT_PUBLIC_*` is detected and auth refuses to run with it. `.env.example` documents all variables.
+- **Modes**: no public Supabase env → `development`/`demo` use a labelled demo session; `staging`/`production` fail closed.
+
+**Verified (this session)**
+- Gates: typecheck ✓ · lint ✓ (0/0) · **68 tests** ✓ (8 files: routes, schemas, key detection, session/DAL, proxy, all 8 API routes return 401 before parsing, Server Actions incl. outage/enumeration/redirect, scan ownership) · build ✓.
+- Runtime (production server + curl), three builds:
+  - *production, auth unconfigured*: public pages 200; `/overview`, `/scans`, `/settings` → 307 `/login`; API → 503 `auth_not_configured`; login form disabled with notice.
+  - *demo, auth unconfigured*: app pages 200 with the demo banner; env pill `demo`; scan works.
+  - *auth configured (placeholder `.invalid` project)*: protected pages → 307 `/login?next=…` (query preserved, unknown routes included); **forged auth cookie rejected**; API → 401; `/auth/confirm` with a bad token or `next=https://evil.test` → `/login?error=link_invalid`; login form enabled and shows the link-expired notice.
+
+**Not verified**
+- The real sign-up → email → verify → login → refresh → logout → reset journey (needs the real project + inbox).
+- Visual/browser pass: no browser tooling could reach a local server this session. Pages were checked via HTML only.
+
+**Live project wiring (verified 2026-10-31)**
+- Project `zwowuzkxgsvpfcymysca` (dedicated, per ADR-002). `.env.local` holds the publishable key + `NEXT_PUBLIC_SITE_URL`; server-only `SUPABASE_*` deliberately unset (no `vs_scans` table there, so scan history stays in memory).
+- Read from the project's own `/auth/v1/settings`: email provider on, `disable_signup: false`, **`mailer_autoconfirm: false`** (verification required). Key validated (200 with it, 401 with a wrong one).
+- With auth live: protected routes 307 → `/login?next=…`, API 401 `unauthorized` (not 503), login form enabled, demo session correctly suppressed, no `@supabase/ssr` cookie warnings in the server log.
+
+**Known issue — email confirmation links (open)**
+A real sign-up succeeded, but `/auth/confirm?code=…` failed → `/login?error=link_invalid`. Supabase's **default** email template sends a PKCE `code`, which only works in the browser that signed up and is consumed if a mail client pre-fetches the link (Gmail does). Fix is a dashboard change, step 4 below (`token_hash` + `verifyOtp`, already supported in the route and browser-independent). Mitigations shipped: `/verify-email` now has a **sign-out escape hatch** (an unverified session otherwise cannot reach the shell's sign-out, so it was a dead end), a clearer `link_invalid` message, and a "Send a new link" link on `/login`.
+
+**Your setup checklist**
+1. ✅ Project created.
+2. ✅ Confirm email ON (verified via the settings endpoint).
+3. Authentication → URL Configuration: Site URL `http://localhost:3000`; add redirect URL `http://localhost:3000/auth/confirm` (add the Vercel URL at deploy time). **Not verifiable from here — the Management API is out of scope for the connector.**
+4. **Required for reliable links** — Authentication → Emails → Templates:
+   - *Confirm signup*: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=signup&next=/overview`
+   - *Reset password*: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password`
+5. ✅ `.env.local` populated.
+6. Optional: enable Google sign-in (below).
+
+**Google (Gmail) sign-in — code complete, provider not yet enabled**
+- `signInWithGoogle` action + `GoogleButton`; callback reuses `/auth/confirm` (OAuth `code` → `exchangeCodeForSession`); cancelled/failed handshakes map to distinct `oauth_cancelled` / `oauth_failed` messages instead of "invalid link".
+- The button renders **only when the project really has Google enabled** (`lib/supabase/providers.ts` reads `/auth/v1/settings`, caches 5 min, fails closed) — no dead button. Your project reports `google: false`, so it is currently hidden, as verified on `/login` and `/signup`.
+- Identity only; unrelated to the future GitHub App repo authorisation. OAuth emails arrive provider-verified, so they skip `/verify-email`.
+- To enable: Google Cloud Console → OAuth client (Web) with redirect `https://zwowuzkxgsvpfcymysca.supabase.co/auth/v1/callback`, then Supabase → Authentication → Sign In / Providers → Google: paste client ID + secret. The button then appears by itself.
+
+**Known gaps carried forward**
+- Workspaces, roles and durable per-user scan storage are Stage 2. The legacy `vs_scans` table has no `owner_id` and does not exist in the new project, so scan history stays in server memory (labelled "not durable") until then.
+- Profile editing, account deletion, sessions list → Stage 11. Default Supabase email sender is rate-limited; custom SMTP before launch (D3).
+- `PLANS` (Team) lists "SSO & audit exports" and "Priority remediation", which the roadmap doesn't specify; review before launch.
+- FinOps/Database/Smoke/Context pages still show labelled fixtures to every account (Stages 7/8).
 
 ## Stage 0.5 — Foundation hardening (DONE, 2026-10-31)
 
@@ -20,7 +76,7 @@ queue are now driven by real scanner output._
 - **Verified at runtime** (production server, curl): pages return 200; topbar shows `demo` for an unconfigured build and `production` when set; Overview with no scan in `production` is unavailable (no fixtures); after `POST /api/scan` Overview flips to Live with no demo banner; SSE events carry `static-rules`.
 - **Not verified:** no browser/visual pass (no browser tooling used this stage); Supabase read/write path (no env vars); `live-scan-theater` rendering in a real browser.
 - **Known gaps carried forward:** FinOps, Database, Smoke/Context, Integrations pages still serve labelled fixtures regardless of `APP_ENV` (they need typed empty states; done with their real backends in Stages 3/7/8) — so **do not deploy as `staging`/`production` before then**. "Connected" is still env-var presence (ADR-010, Stage 3). `DataBanner` shows a generic message for `unavailable` and ignores `note`. Earlier docs said the sample yields 10 findings / score 65; the actual current output is 9 / 68.
-- **Exact next action:** Stage 1, blocked on decision D1 (dedicated Supabase project).
+- **Exact next action:** done → see Stage 1 above.
 
 ## Stage 0 — Audit (DONE, 2026-10-31)
 

@@ -1,11 +1,14 @@
 import { z } from "zod";
 import { parse, notImplemented, requireIntegration } from "@/lib/api";
+import { requireApiUser } from "@/lib/auth/session";
 
 const schema = z.object({
   findingId: z.string().min(1),
 });
 
 export async function POST(req: Request) {
+  const user = await requireApiUser();
+  if (user instanceof Response) return user;
   const parsed = await parse(req, schema);
   if ("error" in parsed) return parsed.error;
 

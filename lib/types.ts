@@ -75,6 +75,38 @@ export type McpClient = "cursor" | "windsurf" | "claude-code";
  *  from stale/failed data. Honesty requirement from the master spec. */
 export type DataOrigin = "live" | "demo" | "stale" | "unavailable";
 
+// ---- Auth --------------------------------------------------------------------
+
+/** supabase: real accounts · demo: auth not configured, fixture session (dev/demo only) · unconfigured: fail closed. */
+export type AuthMode = "supabase" | "demo" | "unconfigured";
+
+/** The verified identity handed to UI. Only non-sensitive fields. */
+export interface SessionUser {
+  id: string;
+  email: string;
+  name: string;
+  demo: boolean;
+}
+
+// ---- Public site -------------------------------------------------------------
+
+/** available: works today · preview: UI with labelled demo data · building: not usable yet. */
+export type CapabilityStatus = "available" | "preview" | "building";
+
+export interface Capability {
+  label: string;
+  detail: string;
+  status: CapabilityStatus;
+}
+
+export interface ProductModule {
+  key: string;
+  name: string;
+  summary: string;
+  icon: string;
+  capabilities: Capability[];
+}
+
 // ---- Core entities -----------------------------------------------------------
 
 export interface User {

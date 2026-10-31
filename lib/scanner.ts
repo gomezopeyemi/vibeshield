@@ -20,6 +20,8 @@ import type { FileEntry, RepoSource, SourceInfo } from "./source";
 
 export interface ScanResult {
   scanId: string;
+  /** Account that ran the scan; set by saveScan. Scans are only ever read back by their owner. */
+  ownerId?: string;
   source: SourceInfo;
   status: ScanStatus;
   startedAt: string;

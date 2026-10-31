@@ -12,16 +12,18 @@ import { Icon } from "@/components/ui/icon";
 import { ScanPill } from "@/components/ui/status-pill";
 import { SeverityBadge } from "@/components/ui/severity-badge";
 import { ScoreRing } from "@/components/ui/score-ring";
+import { requireUser } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Scan detail" };
 export const dynamic = "force-dynamic";
 
 export default async function ScanDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const run = await getRun(id);
+  const user = await requireUser();
+  const run = await getRun(id, user.id);
   if (!run) notFound();
 
-  const runs = await listRuns();
+  const runs = await listRuns(user.id);
   const idx = runs.findIndex((r) => r.scanId === id);
   const previous = runs.slice(idx + 1).find((r) => r.status === "completed");
   const st = storeStatus();

@@ -8,7 +8,7 @@ import {
   useMemo,
   type ReactNode,
 } from "react";
-import type { PlanTier, Repository, User, Workspace } from "@/lib/types";
+import type { PlanTier, Repository, SessionUser, User, Workspace } from "@/lib/types";
 import type { AppEnv } from "@/lib/config";
 import {
   DEMO_REPOSITORIES,
@@ -16,9 +16,20 @@ import {
   DEMO_WORKSPACES,
 } from "@/lib/demo/session";
 
+// Real accounts have no workspace records until Stage 2; this placeholder is never persisted.
+const PERSONAL_WORKSPACE: Workspace = {
+  id: "ws_personal",
+  name: "Personal",
+  slug: "personal",
+  plan: "free",
+  memberCount: 1,
+};
+
 interface SessionValue {
   /** Deployment environment from the server (VIBESHIELD_ENV), not a fixture. */
   appEnv: AppEnv;
+  /** True when the signed-in identity is the demo fixture (auth not configured). */
+  demoSession: boolean;
   user: User;
   workspace: Workspace;
   workspaces: Workspace[];
@@ -41,45 +52,65 @@ interface UIValue {
 const SessionContext = createContext<SessionValue | null>(null);
 const UIContext = createContext<UIValue | null>(null);
 
-export function AppProvider({ children, appEnv }: { children: ReactNode; appEnv: AppEnv }) {
-  const [workspace, setWorkspaceState] = useState<Workspace>(DEMO_WORKSPACES[0]);
-  const [repository, setRepositoryState] = useState<Repository | null>(
-    DEMO_REPOSITORIES[0],
-  );
+export function AppProvider({
+  children,
+  appEnv,
+  sessionUser,
+}: {
+  children: ReactNode;
+  appEnv: AppEnv;
+  sessionUser: SessionUser;
+}) {
+  const demoSession = sessionUser.demo;
+  const workspaces = useMemo(() => (demoSession ? DEMO_WORKSPACES : [PERSONAL_WORKSPACE]), [demoSession]);
+  const repositories = useMemo(() => (demoSession ? DEMO_REPOSITORIES : []), [demoSession]);
+
+  const [workspace, setWorkspaceState] = useState<Workspace>(workspaces[0]);
+  const [repository, setRepositoryState] = useState<Repository | null>(repositories[0] ?? null);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
 
-  const repositories = useMemo(
-    () => DEMO_REPOSITORIES.filter((r) => r.owner === workspace.name || true),
-    [workspace],
+  const setWorkspace = useCallback(
+    (id: string) => {
+      const ws = workspaces.find((w) => w.id === id);
+      if (ws) setWorkspaceState(ws);
+    },
+    [workspaces],
   );
 
-  const setWorkspace = useCallback((id: string) => {
-    const ws = DEMO_WORKSPACES.find((w) => w.id === id);
-    if (ws) setWorkspaceState(ws);
-  }, []);
+  const setRepository = useCallback(
+    (id: string | null) => {
+      if (id === null) return setRepositoryState(null);
+      const repo = repositories.find((r) => r.id === id);
+      if (repo) setRepositoryState(repo);
+    },
+    [repositories],
+  );
 
-  const setRepository = useCallback((id: string | null) => {
-    if (id === null) return setRepositoryState(null);
-    const repo = DEMO_REPOSITORIES.find((r) => r.id === id);
-    if (repo) setRepositoryState(repo);
-  }, []);
+  const user = useMemo<User>(
+    () =>
+      demoSession
+        ? DEMO_USER
+        : { id: sessionUser.id, name: sessionUser.name, email: sessionUser.email, plan: "free" },
+    [demoSession, sessionUser],
+  );
 
   const session = useMemo<SessionValue>(
     () => ({
       appEnv,
-      user: DEMO_USER,
+      demoSession,
+      user,
       workspace,
-      workspaces: DEMO_WORKSPACES,
+      workspaces,
       repositories,
       repository,
       plan: workspace.plan,
       setWorkspace,
       setRepository,
     }),
-    [appEnv, workspace, repositories, repository, setWorkspace, setRepository],
+    [appEnv, demoSession, user, workspace, workspaces, repositories, repository, setWorkspace, setRepository],
   );
 
   const ui = useMemo<UIValue>(

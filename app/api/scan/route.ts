@@ -3,6 +3,7 @@ import { parse, ok, fail } from "@/lib/api";
 import { sampleSource, githubSource } from "@/lib/source";
 import { runScan } from "@/lib/scanner";
 import { saveScan } from "@/lib/scan-store";
+import { requireApiUser } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,8 @@ const schema = z.object({
  * The sample target works anywhere; the GitHub target needs a reachable repo
  * (blocked in this sandbox) and fails honestly. */
 export async function POST(req: Request) {
+  const user = await requireApiUser();
+  if (user instanceof Response) return user;
   const parsed = await parse(req, schema);
   if ("error" in parsed) return parsed.error;
   const { target = "sample", repo, branch = "main" } = parsed.data;
@@ -35,7 +38,7 @@ export async function POST(req: Request) {
     });
   }
 
-  const store = await saveScan(result);
+  const store = await saveScan(result, user.id);
   return ok({ persisted: store.persisted, storage: store.mode,
     scanId: result.scanId,
     score: result.score,

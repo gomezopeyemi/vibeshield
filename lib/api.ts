@@ -7,7 +7,13 @@ import { LIVE_MODE, CREDENTIALS, type IntegrationKey } from "./config";
 
 export interface ActionError {
   ok: false;
-  code: "not_connected" | "invalid_request" | "forbidden" | "not_implemented";
+  code:
+    | "not_connected"
+    | "invalid_request"
+    | "forbidden"
+    | "not_implemented"
+    | "unauthorized"
+    | "auth_not_configured";
   integration?: IntegrationKey;
   message: string;
   remediation?: string;

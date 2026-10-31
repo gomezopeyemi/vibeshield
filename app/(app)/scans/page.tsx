@@ -12,6 +12,7 @@ import { Icon } from "@/components/ui/icon";
 import { Badge } from "@/components/ui/badge";
 import { LineChart } from "@/components/ui/line-chart";
 import type { ScanStatus } from "@/lib/types";
+import { requireUser } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Repository Scans" };
 export const dynamic = "force-dynamic";
@@ -27,7 +28,7 @@ export default async function ScansPage({ searchParams }: { searchParams: Promis
   const filter = FILTERS.find((f) => f.key === status) ?? FILTERS[0];
   const env = await getScans();
   const scans = env.data.filter((s) => filter.match(s.status));
-  const runs = env.origin === "live" ? await listRuns() : [];
+  const runs = env.origin === "live" ? await listRuns((await requireUser()).id) : [];
   const scoreById = new Map(runs.map((r) => [r.scanId, r.score]));
   const trend = runs
     .filter((r) => r.status === "completed")

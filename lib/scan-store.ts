@@ -36,6 +36,7 @@ export function storeStatus(): StoreStatus {
 
 interface Row {
   id: string;
+  owner_id: string;
   source: ScanResult["source"];
   status: ScanResult["status"];
   started_at: string;
@@ -50,8 +51,9 @@ interface Row {
   error: string | null;
 }
 
-const toRow = (r: ScanResult): Row => ({
+const toRow = (r: ScanResult & { ownerId: string }): Row => ({
   id: r.scanId,
+  owner_id: r.ownerId,
   source: r.source,
   status: r.status,
   started_at: r.startedAt,
@@ -68,6 +70,7 @@ const toRow = (r: ScanResult): Row => ({
 
 const fromRow = (w: Row): ScanResult => ({
   scanId: w.id,
+  ownerId: w.owner_id,
   source: w.source,
   status: w.status,
   startedAt: w.started_at,
@@ -103,8 +106,9 @@ function remember(result: ScanResult) {
   if (memory.length > MEM_LIMIT) memory.length = MEM_LIMIT;
 }
 
-/** Persist a finished scan. Returns where it actually landed. */
-export async function saveScan(result: ScanResult): Promise<StoreStatus> {
+/** Persist a finished scan for its owner. Returns where it actually landed. */
+export async function saveScan(scan: ScanResult, ownerId: string): Promise<StoreStatus> {
+  const result = { ...scan, ownerId };
   if (PERSISTENCE_CONFIGURED) {
     try {
       await rest("vs_scans", {
@@ -122,39 +126,40 @@ export async function saveScan(result: ScanResult): Promise<StoreStatus> {
   return storeStatus();
 }
 
-/** All scans, newest first (durable rows merged with anything held in memory). */
-export async function listRuns(limit = 50): Promise<ScanResult[]> {
+/** The owner's scans, newest first (durable rows merged with anything held in memory). */
+export async function listRuns(ownerId: string, limit = 50): Promise<ScanResult[]> {
   let durable: ScanResult[] = [];
   if (PERSISTENCE_CONFIGURED) {
     try {
-      const rows = await rest<Row[]>(`vs_scans?select=*&order=finished_at.desc&limit=${limit}`);
-      durable = rows.map(fromRow);
+      const rows = await rest<Row[]>(
+        `vs_scans?owner_id=eq.${encodeURIComponent(ownerId)}&select=*&order=finished_at.desc&limit=${limit}`,
+      );
+      durable = rows.map(fromRow).filter((r) => r.ownerId === ownerId);
       lastError = undefined;
     } catch (err) {
       lastError = err instanceof Error ? err.message : "Supabase read failed";
     }
   }
   const seen = new Set(durable.map((r) => r.scanId));
-  return [...durable, ...memory.filter((r) => !seen.has(r.scanId))]
+  return [...durable, ...memory.filter((r) => r.ownerId === ownerId && !seen.has(r.scanId))]
     .sort((a, b) => b.finishedAt.localeCompare(a.finishedAt))
     .slice(0, limit);
 }
 
-export async function getRun(id: string): Promise<ScanResult | null> {
-  const m = memory.find((r) => r.scanId === id);
-  if (m) return m;
-  if (!PERSISTENCE_CONFIGURED) return null;
-  try {
-    const rows = await rest<Row[]>(`vs_scans?id=eq.${encodeURIComponent(id)}&select=*&limit=1`);
-    return rows[0] ? fromRow(rows[0]) : null;
-  } catch (err) {
-    lastError = err instanceof Error ? err.message : "Supabase read failed";
-    return null;
+/** A scan by id, only if it belongs to `ownerId` (otherwise null, same as not found). */
+export async function getRun(id: string, ownerId: string): Promise<ScanResult | null> {
+  if (PERSISTENCE_CONFIGURED) {
+    try {
+      const rows = await rest<Row[]>(
+        `vs_scans?id=eq.${encodeURIComponent(id)}&owner_id=eq.${encodeURIComponent(ownerId)}&select=*&limit=1`,
+      );
+      const row = rows[0] ? fromRow(rows[0]) : null;
+      if (row?.ownerId === ownerId) return row;
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : "Supabase read failed";
+    }
   }
-}
-
-export async function latestScan(): Promise<ScanResult | null> {
-  return (await listRuns(50)).find((r) => r.status === "completed") ?? null;
+  return memory.find((r) => r.scanId === id && r.ownerId === ownerId) ?? null;
 }
 
 // ---- converters to UI view-models -------------------------------------------

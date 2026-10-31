@@ -21,8 +21,8 @@ Needed because later stages assume them.
 - Introduce `APP_ENV` + single provenance model (ADR-009); remove hard-coded `DEMO_MODE`.
 - **Accept:** lint 0 errors, tests green, concurrent-scan test passes, no UI string claims a tool or history scan that did not run.
 
-## Stage 1 — Public site and authentication
-- **Needs:** ADR-002 decision (which Supabase project).
+## Stage 1 — Public site and authentication — code complete; live verification pending your Supabase project
+- **Needs:** ADR-002 decision (decided: dedicated project, keys supplied by the founder).
 - Landing, features, pricing, terms, privacy (copy describes only what exists, with roadmap labelling).
 - Supabase Auth: signup, email verify, login, logout, forgot/reset password, `proxy.ts` gating, server-side session check in a data-access layer, callback route.
 - `/api/scan*` require a session.
@@ -67,10 +67,10 @@ Env separation, CI/CD, migration deploys, worker deploy and health checks, monit
 ## Decisions needed from you
 | # | Decision | Needed by | Recommendation |
 |---|---|---|---|
-| D1 | Supabase project for VibeShield (ADR-002) | Stage 1 | New dedicated project |
+| D1 | Supabase project for VibeShield (ADR-002) | Stage 1 | ✅ Decided: new dedicated project, created by the founder |
 | D2 | Worker host (Fly.io Machines vs other) | Stage 4 | Fly.io, per original brief |
 | D3 | Auth email sender | Stage 1 staging | Supabase default for dev; custom SMTP before launch |
 | D4 | Production domain / app name | Stage 12 | — |
 
 ## Immediate next action
-Stage 1, once D1 is answered.
+Finish Stage 1 verification once the VibeShield Supabase project's keys are in `.env.local` (see IMPLEMENTATION_STATUS.md, Stage 1 checklist), then Stage 2.

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { signOut } from "@/lib/auth/actions";
 import { useSession, useUI } from "@/components/providers";
 import { Icon } from "@/components/ui/icon";
 import { Avatar } from "@/components/ui/avatar";
@@ -55,8 +56,8 @@ export function Topbar() {
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
-          <DropdownMenuItem>
-            <Icon name="Plus" /> New workspace
+          <DropdownMenuItem disabled>
+            <Icon name="Plus" /> New workspace · coming soon
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -172,7 +173,7 @@ function Notifications() {
 }
 
 function UserMenu() {
-  const { user, plan } = useSession();
+  const { user, plan, demoSession } = useSession();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brand/40">
@@ -197,7 +198,11 @@ function UserMenu() {
           <Link href="/integrations"><Icon name="Plug" /> Integrations</Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem tone="danger"><Icon name="LogOut" /> Sign out</DropdownMenuItem>
+        {demoSession ? (
+          <DropdownMenuItem disabled><Icon name="LogOut" /> Sign out (demo session)</DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem tone="danger" onSelect={() => void signOut()}><Icon name="LogOut" /> Sign out</DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

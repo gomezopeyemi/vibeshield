@@ -1,6 +1,7 @@
 import { sampleSource, githubSource } from "@/lib/source";
 import { runScan } from "@/lib/scanner";
 import { saveScan } from "@/lib/scan-store";
+import { requireApiUser } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +10,8 @@ export const dynamic = "force-dynamic";
  * target=sample scans the bundled vulnerable app (works everywhere).
  * target=github requires a reachable, connected repository. */
 export async function GET(req: Request) {
+  const user = await requireApiUser();
+  if (user instanceof Response) return user;
   const url = new URL(req.url);
   const target = url.searchParams.get("target") ?? "sample";
   const repo = url.searchParams.get("repo") ?? "";
@@ -31,7 +34,7 @@ export async function GET(req: Request) {
         const result = await runScan(source, (e) => send({ type: "event", event: e }), {
           pace: true,
         });
-        const store = result.status === "completed" ? await saveScan(result) : null;
+        const store = result.status === "completed" ? await saveScan(result, user.id) : null;
         send({
           type: "result",
           result: {

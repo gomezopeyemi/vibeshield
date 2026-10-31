@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { signOut } from "@/lib/auth/actions";
 import { useSession } from "@/components/providers";
 import { PLANS, PLAN_RANK } from "@/lib/constants";
 import { Card } from "@/components/ui/card";
@@ -13,20 +15,30 @@ import { Avatar } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 
 export function SettingsView() {
-  const { appEnv, user, workspace, plan } = useSession();
+  const { appEnv, demoSession, user, workspace, plan } = useSession();
   const [note, setNote] = useState<string | null>(null);
 
   return (
     <div className="space-y-6">
       {/* Account */}
-      <Section title="Account" description="Your personal profile.">
+      <Section title="Account" description="Your sign-in identity. Profile editing arrives with account settings.">
         <div className="flex items-center gap-4">
           <Avatar name={user.name} size={56} />
           <div className="grid flex-1 gap-3 sm:grid-cols-2">
-            <Field label="Name"><Input defaultValue={user.name} /></Field>
-            <Field label="Email"><Input defaultValue={user.email} /></Field>
+            <Field label="Name"><Input value={user.name} readOnly disabled /></Field>
+            <Field label="Email"><Input value={user.email} readOnly disabled /></Field>
           </div>
         </div>
+        {!demoSession && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button asChild variant="secondary" size="sm">
+              <Link href="/reset-password"><Icon name="KeyRound" /> Change password</Link>
+            </Button>
+            <form action={signOut}>
+              <Button type="submit" variant="ghost" size="sm"><Icon name="LogOut" /> Sign out</Button>
+            </form>
+          </div>
+        )}
       </Section>
 
       {/* Workspace */}

@@ -9,7 +9,7 @@ export default function NotFound() {
         icon="Search"
         title="Page not found"
         description="That page doesn't exist or was moved."
-        action={<Button asChild variant="primary"><Link href="/overview">Back to Overview</Link></Button>}
+        action={<Button asChild variant="primary"><Link href="/">Back to home</Link></Button>}
       />
     </div>
   );
