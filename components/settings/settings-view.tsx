@@ -4,7 +4,6 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/components/providers";
 import { PLANS, PLAN_RANK } from "@/lib/constants";
-import type { PlanTier } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +13,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 
 export function SettingsView() {
-  const { user, workspace, plan } = useSession();
+  const { appEnv, user, workspace, plan } = useSession();
   const [note, setNote] = useState<string | null>(null);
 
   return (
@@ -35,7 +34,7 @@ export function SettingsView() {
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Workspace name"><Input defaultValue={workspace.name} /></Field>
           <Field label="Slug"><Input defaultValue={workspace.slug} /></Field>
-          <Field label="Environment"><Input defaultValue={workspace.environment} disabled /></Field>
+          <Field label="Environment"><Input defaultValue={appEnv} disabled /></Field>
         </div>
       </Section>
 

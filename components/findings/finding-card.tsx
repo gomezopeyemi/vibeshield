@@ -1,6 +1,5 @@
 "use client";
 
-import { cn } from "@/lib/utils";
 import type { Finding, PullRequest } from "@/lib/types";
 import { PILLARS } from "@/lib/constants";
 import { generateFixPrompt } from "@/lib/prompts";

@@ -4,6 +4,7 @@ import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import { AppProvider } from "@/components/providers";
 import { APP_NAME, APP_TAGLINE } from "@/lib/constants";
+import { APP_ENV } from "@/lib/config";
 
 export const metadata: Metadata = {
   title: {
@@ -23,7 +24,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full bg-canvas text-ink antialiased">
-        <AppProvider>{children}</AppProvider>
+        <AppProvider appEnv={APP_ENV}>{children}</AppProvider>
       </body>
     </html>
   );

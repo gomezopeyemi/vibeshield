@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parse, ok, requireIntegration } from "@/lib/api";
+import { parse, notImplemented, requireIntegration } from "@/lib/api";
 
 const schema = z.object({
   enabled: z.boolean(),
@@ -20,5 +20,5 @@ export async function POST(req: Request) {
   if (gate) return gate;
 
   // TODO(live): persist RateLimitConfig and deploy/update the middleware.
-  return ok({ saved: false, deployed: false, config: parsed.data });
+  return notImplemented("Rate-limit configuration is not built yet.");
 }

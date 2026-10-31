@@ -9,25 +9,22 @@ import {
   type ReactNode,
 } from "react";
 import type { PlanTier, Repository, User, Workspace } from "@/lib/types";
+import type { AppEnv } from "@/lib/config";
 import {
   DEMO_REPOSITORIES,
   DEMO_USER,
   DEMO_WORKSPACES,
 } from "@/lib/demo/session";
 
-/* The app is in DEMO mode until real backends/credentials are connected.
- * This flag drives the honest "DEMO DATA" banner shown across screens — it is
- * never used to fake a "connected" integration state. */
-export const DEMO_MODE = true;
-
 interface SessionValue {
+  /** Deployment environment from the server (VIBESHIELD_ENV), not a fixture. */
+  appEnv: AppEnv;
   user: User;
   workspace: Workspace;
   workspaces: Workspace[];
   repositories: Repository[];
   repository: Repository | null;
   plan: PlanTier;
-  demoMode: boolean;
   setWorkspace: (id: string) => void;
   setRepository: (id: string | null) => void;
 }
@@ -44,7 +41,7 @@ interface UIValue {
 const SessionContext = createContext<SessionValue | null>(null);
 const UIContext = createContext<UIValue | null>(null);
 
-export function AppProvider({ children }: { children: ReactNode }) {
+export function AppProvider({ children, appEnv }: { children: ReactNode; appEnv: AppEnv }) {
   const [workspace, setWorkspaceState] = useState<Workspace>(DEMO_WORKSPACES[0]);
   const [repository, setRepositoryState] = useState<Repository | null>(
     DEMO_REPOSITORIES[0],
@@ -72,17 +69,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const session = useMemo<SessionValue>(
     () => ({
+      appEnv,
       user: DEMO_USER,
       workspace,
       workspaces: DEMO_WORKSPACES,
       repositories,
       repository,
       plan: workspace.plan,
-      demoMode: DEMO_MODE,
       setWorkspace,
       setRepository,
     }),
-    [workspace, repositories, repository, setWorkspace, setRepository],
+    [appEnv, workspace, repositories, repository, setWorkspace, setRepository],
   );
 
   const ui = useMemo<UIValue>(

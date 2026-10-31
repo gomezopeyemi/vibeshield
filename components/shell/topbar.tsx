@@ -7,7 +7,6 @@ import { Icon } from "@/components/ui/icon";
 import { Avatar } from "@/components/ui/avatar";
 import { Kbd } from "@/components/ui/kbd";
 import { Badge } from "@/components/ui/badge";
-import { ConnectionPill } from "@/components/ui/status-pill";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -18,16 +17,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export function Topbar() {
-  const { workspace, workspaces, repositories, repository, setWorkspace, setRepository } =
+  const { appEnv, workspace, workspaces, repositories, repository, setWorkspace, setRepository } =
     useSession();
   const { setMobileNavOpen, setCommandOpen } = useUI();
 
-  const envTone =
-    workspace.environment === "production"
-      ? "success"
-      : workspace.environment === "staging"
-        ? "warning"
-        : "neutral";
+  const envTone = appEnv === "production" ? "success" : appEnv === "development" ? "neutral" : "warning";
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-line bg-canvas/85 px-3 backdrop-blur-md sm:px-4">
@@ -106,7 +100,7 @@ export function Topbar() {
       {/* Environment indicator */}
       <Badge tone={envTone as "success" | "warning" | "neutral"} size="md" className="hidden capitalize md:inline-flex">
         <span className={cn("size-1.5 rounded-full", envTone === "success" ? "bg-success" : envTone === "warning" ? "bg-warning" : "bg-faint")} />
-        {workspace.environment}
+        {appEnv}
       </Badge>
 
       <div className="flex-1" />

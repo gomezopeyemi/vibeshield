@@ -27,6 +27,14 @@ export function ok<T>(data: T): Response {
   return Response.json({ ok: true, data } satisfies ActionSuccess<T>);
 }
 
+/** The integration is configured but the backend call is not built yet. Never `ok`. */
+export function notImplemented(message: string): Response {
+  return fail(
+    { code: "not_implemented", message, remediation: "This capability is not built yet; nothing was changed." },
+    501,
+  );
+}
+
 export async function parse<T extends z.ZodTypeAny>(
   req: Request,
   schema: T,

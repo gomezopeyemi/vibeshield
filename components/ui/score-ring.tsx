@@ -27,26 +27,20 @@ export function ScoreRing({
   className?: string;
 }) {
   const reduce = useReducedMotion();
-  const [display, setDisplay] = useState(reduce ? score : 0);
-  const [progress, setProgress] = useState(reduce ? score : 0);
+  const [anim, setAnim] = useState({ display: 0, progress: 0 });
+  const display = reduce ? score : anim.display;
+  const progress = reduce ? score : anim.progress;
 
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
   const { stroke: color, label: bandLabel } = band(score);
 
   useEffect(() => {
-    if (reduce) {
-      setDisplay(score);
-      setProgress(score);
-      return;
-    }
+    if (reduce) return;
     const controls = animate(0, score, {
       duration: 1.1,
       ease: [0.16, 1, 0.3, 1],
-      onUpdate: (v) => {
-        setDisplay(Math.round(v));
-        setProgress(v);
-      },
+      onUpdate: (v) => setAnim({ display: Math.round(v), progress: v }),
     });
     return () => controls.stop();
   }, [score, reduce]);

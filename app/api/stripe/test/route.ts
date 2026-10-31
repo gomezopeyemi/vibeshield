@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parse, ok, requireIntegration } from "@/lib/api";
+import { parse, notImplemented, requireIntegration } from "@/lib/api";
 
 const schema = z.object({
   event: z.string().min(1), // e.g. checkout.session.completed
@@ -20,5 +20,5 @@ export async function POST(req: Request) {
   // TODO(live): dispatch a signed test event to the configured endpoint in a
   // sandbox and return signature/processing/db-sync results. Never writes to
   // real customer payment records.
-  return ok({ dispatched: false });
+  return notImplemented("Stripe webhook test dispatch is not built yet.");
 }

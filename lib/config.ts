@@ -6,6 +6,23 @@
 
 export const LIVE_MODE = process.env.VIBESHIELD_LIVE === "1";
 
+/* Deployment environment — the single source for the topbar pill and for
+ * whether demo fixtures may be served. Unset resolves to "development" locally
+ * and to "demo" in a production build, so an unconfigured deploy is labelled
+ * demo rather than passing itself off as production. */
+export type AppEnv = "development" | "demo" | "staging" | "production";
+
+function resolveAppEnv(): AppEnv {
+  const v = process.env.VIBESHIELD_ENV;
+  if (v === "development" || v === "demo" || v === "staging" || v === "production") return v;
+  return process.env.NODE_ENV === "production" ? "demo" : "development";
+}
+
+export const APP_ENV: AppEnv = resolveAppEnv();
+
+/** Demo fixtures are only ever served in development and demo deployments. */
+export const DEMO_ALLOWED = APP_ENV === "development" || APP_ENV === "demo";
+
 export const CREDENTIALS = {
   github: Boolean(process.env.GITHUB_APP_ID && process.env.GITHUB_APP_PRIVATE_KEY),
   supabase: Boolean(process.env.SUPABASE_ACCESS_TOKEN),

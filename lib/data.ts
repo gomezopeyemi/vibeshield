@@ -1,5 +1,5 @@
 import "server-only";
-import { LIVE_MODE, isConnected } from "./config";
+import { LIVE_MODE, DEMO_ALLOWED, isConnected } from "./config";
 import { formatTime } from "./utils";
 import type {
   DataEnvelope,
@@ -33,6 +33,7 @@ import {
 import { DEMO_INTEGRATIONS } from "./demo/session";
 import {
   listRuns,
+  getRun,
   readinessFromRuns,
   findingsFromRuns,
   resultToScan,
@@ -83,14 +84,20 @@ function unavailable<T>(data: T, note: string): DataEnvelope<T> {
   return { origin: "unavailable", data, note };
 }
 
+/** Demo fixtures are served only in development/demo deployments, only when
+ * live mode is off, and never beside real scan data. */
+async function demoServable(): Promise<boolean> {
+  if (!DEMO_ALLOWED || LIVE_MODE) return false;
+  return (await listRuns()).length === 0;
+}
+
 export async function getReadiness(): Promise<DataEnvelope<ReadinessState>> {
-  // A real scan has run this session → use its computed score.
   const live = readinessFromRuns(await listRuns());
   if (live) {
     return { origin: "live", data: live, lastUpdatedAt: formatTime(live.lastScanAt!), note: storeNote() };
   }
-  if (LIVE_MODE && !isConnected("github")) {
-    return unavailable(emptyReadiness(), "Connect GitHub and run a scan to compute your Launch Readiness Score.");
+  if (!(await demoServable())) {
+    return unavailable(emptyReadiness(), "No completed scan yet. Run a scan to compute your Launch Readiness Score.");
   }
   return demo(DEMO_READINESS, formatTime(DEMO_READINESS.lastScanAt!));
 }
@@ -100,14 +107,16 @@ export async function getFindings(): Promise<DataEnvelope<Finding[]>> {
   if (live.length > 0) {
     return { origin: "live", data: live };
   }
-  if (LIVE_MODE && !isConnected("github")) {
-    return unavailable([], "No scans yet. Connect a repository and start a scan.");
+  if (!(await demoServable())) {
+    return unavailable([], "No findings yet. Run a scan to see results.");
   }
   return demo(DEMO_FINDINGS);
 }
 
 export async function getFinding(id: string): Promise<Finding | null> {
-  return findingsFromRuns(await listRuns()).find((f) => f.id === id) ?? DEMO_FINDINGS.find((f) => f.id === id) ?? null;
+  const live = findingsFromRuns(await listRuns()).find((f) => f.id === id);
+  if (live) return live;
+  return (await demoServable()) ? (DEMO_FINDINGS.find((f) => f.id === id) ?? null) : null;
 }
 
 export async function getScans(): Promise<DataEnvelope<Scan[]>> {
@@ -115,34 +124,44 @@ export async function getScans(): Promise<DataEnvelope<Scan[]>> {
   if (runs.length > 0) {
     return { origin: "live", data: runs.map(resultToScan), note: storeNote() };
   }
-  if (LIVE_MODE && !isConnected("github")) {
-    return unavailable([], "Connect GitHub to view scan history.");
+  if (!(await demoServable())) {
+    return unavailable([], "No scans yet. Run your first scan.");
   }
   return demo(DEMO_SCANS);
 }
 
 export async function getScanEvents(scanId: string): Promise<DataEnvelope<ScanEvent[]>> {
-  if (LIVE_MODE && !isConnected("github")) {
-    return unavailable([], "Scan events stream from the scanner workers once connected.");
+  const run = await getRun(scanId);
+  if (run) return { origin: "live", data: run.events };
+  if (!(await demoServable())) {
+    return unavailable([], "Events for this scan are not available.");
   }
   return demo(DEMO_SCAN_EVENTS.filter((e) => e.scanId === scanId || scanId === "scan_latest"));
 }
 
 export async function getPullRequests(): Promise<DataEnvelope<PullRequest[]>> {
-  if (LIVE_MODE && !isConnected("github")) {
-    return unavailable([], "Connect the GitHub App to open and track remediation PRs.");
+  // No PR backend exists yet, so real PRs are never available; fixtures only in a demo-only context.
+  if (!(await demoServable())) {
+    return unavailable([], "Remediation PRs require the GitHub App, which is not connected yet.");
   }
   return demo(DEMO_PULL_REQUESTS);
 }
 
 export async function getVerification(): Promise<DataEnvelope<VerificationBadge>> {
+  // "Verified" needs a clean verification scan after merged fixes — not built yet, so never claim it.
+  if (!(await demoServable())) {
+    return unavailable(
+      { state: "unverified" },
+      "Verification needs a clean re-scan after fixes are merged. This is not available yet.",
+    );
+  }
   return demo(DEMO_VERIFICATION);
 }
 
 export async function getIntegrations(): Promise<DataEnvelope<Integration[]>> {
   // Integration status is inherently about real connections — in live mode we
   // report the actual credential state rather than demo fixtures.
-  if (LIVE_MODE) {
+  if (LIVE_MODE || !DEMO_ALLOWED) {
     const live: Integration[] = DEMO_INTEGRATIONS.map((i) => ({
       ...i,
       status: "disconnected",

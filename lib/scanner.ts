@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import type {
   Finding,
   ScanEvent,
@@ -10,10 +11,11 @@ import type {
 import type { FileEntry, RepoSource, SourceInfo } from "./source";
 
 /* ============================================================================
-   VibeShield scanner engine — real static analysis over real file contents.
-   A simplified, dependency-free analyzer in the spirit of Gitleaks / Semgrep /
-   Tree-sitter / Supabase inspection. Findings, line numbers, snippets and the
-   readiness score are all computed from the actual source — not fixtures.
+   VibeShield static rules — pattern and heuristic checks over the CURRENT file
+   contents of a source. Not Gitleaks, Semgrep or Tree-sitter: there is no git
+   history scan, no AST and no live database inspection. Real tool-backed
+   scanners arrive with the worker stage. Findings, line numbers, snippets and
+   the readiness score are computed from the actual source — not fixtures.
    ========================================================================== */
 
 export interface ScanResult {
@@ -58,7 +60,6 @@ function redact(text: string): string {
     .replace(/(eyJ[A-Za-z0-9_-]{6,})\.[A-Za-z0-9_.-]+/g, "$1.••••redacted");
 }
 
-let seq = 0;
 function fid(rule: string, path: string, line: number): string {
   return `f_${rule}_${Math.abs(hash(path + ":" + line + ":" + rule))}`;
 }
@@ -94,13 +95,13 @@ function secretRules(files: FileEntry[]): RawFinding[] {
         id: fid("servicekey", f.path, line),
         pillar: "security",
         severity: "critical",
-        scanner: "gitleaks",
+        scanner: "static-rules",
         title: "Exposed Supabase service role key",
         humanSummary:
           "Your database admin key is reachable from the browser (NEXT_PUBLIC). Anyone visiting your site can read it and gain full, unrestricted database access.",
         businessImpact:
           "An attacker could read, modify or delete every row in your database — all user data, payments and secrets — bypassing every security rule.",
-        evidence: `gitleaks: NEXT_PUBLIC_*_SERVICE_ROLE referenced in ${f.path}`,
+        evidence: `secret rule: NEXT_PUBLIC_*_SERVICE_ROLE referenced in ${f.path}`,
         recommendation:
           "Use the publishable (anon) key in client code; keep the service role key in a server-only env var and rotate the exposed key.",
         scoreDelta: PENALTY.critical,
@@ -131,12 +132,12 @@ function secretRules(files: FileEntry[]): RawFinding[] {
           id: fid("secret_" + p.label, f.path, line),
           pillar: "security",
           severity: p.sev,
-          scanner: "gitleaks",
+          scanner: "static-rules",
           title: `Hardcoded ${p.label}`,
           humanSummary: `A ${p.label} is committed in plain text in your repository. Anyone with repo access — or who finds it in git history — can use it.`,
           businessImpact:
             "Committed credentials are a top cause of breaches and surprise bills. The key should be rotated and moved to a secret store.",
-          evidence: `gitleaks: ${p.label} pattern in ${f.path}:${line}`,
+          evidence: `secret rule: ${p.label} pattern in ${f.path}:${line}`,
           recommendation: "Remove the key from source, rotate it, and load it from an environment secret instead.",
           scoreDelta: PENALTY[p.sev],
           resource: f.path,
@@ -161,13 +162,13 @@ function semgrepRules(files: FileEntry[]): RawFinding[] {
         id: fid("stripesig", f.path, line),
         pillar: "revenue",
         severity: "high",
-        scanner: "semgrep",
+        scanner: "static-rules",
         title: "Stripe webhook does not verify signatures",
         humanSummary:
           "Your payment webhook trusts any request that hits it. Someone could fake a 'payment succeeded' event and unlock paid features for free.",
         businessImpact:
           "Attackers can grant themselves subscriptions without paying and spoof events — direct revenue loss and corrupted billing state.",
-        evidence: `semgrep: stripe-webhook-no-constructEvent in ${f.path}`,
+        evidence: `code rule: stripe-webhook-no-constructEvent in ${f.path}`,
         recommendation:
           "Verify the Stripe-Signature header with stripe.webhooks.constructEvent() using your signing secret before processing any event.",
         scoreDelta: PENALTY.high,
@@ -205,12 +206,12 @@ function semgrepRules(files: FileEntry[]): RawFinding[] {
           id: fid("route", f.path, line),
           pillar: "finops",
           severity: !hasAuth ? "high" : "medium",
-          scanner: "semgrep",
+          scanner: "static-rules",
           title: `Unprotected paid route: ${routeLabel(f.path)}`,
           humanSummary: `An endpoint that calls ${provider} ${!hasAuth ? "has no authentication and " : ""}no rate limiting. It can be called repeatedly at will.`,
           businessImpact:
             "A single script could run up large provider charges in minutes — a classic denial-of-wallet attack.",
-          evidence: `semgrep: paid-provider (${provider}) in ${f.path} without ${!hasAuth ? "auth + " : ""}rate limit`,
+          evidence: `code rule: paid-provider (${provider}) in ${f.path} without ${!hasAuth ? "auth + " : ""}rate limit`,
           recommendation: "Add authentication and a rate-limit middleware (e.g. Upstash token bucket) in front of this route.",
           scoreDelta: !hasAuth ? PENALTY.high : PENALTY.medium,
           resource: f.path,
@@ -242,11 +243,11 @@ function treeSitterRules(files: FileEntry[]): RawFinding[] {
         id: fid("monolith", f.path, 1),
         pillar: "code-health",
         severity: "low",
-        scanner: "tree-sitter",
+        scanner: "static-rules",
         title: "Monolith file over 2,000 lines",
         humanSummary: `${f.path} is ${f.lines.toLocaleString()} lines. Large files are hard for AI tools to edit accurately and slow reviews.`,
         businessImpact: "AI agents lose context in huge files and introduce regressions. Splitting improves change safety.",
-        evidence: `tree-sitter: ${f.lines.toLocaleString()} lines in ${f.path}`,
+        evidence: `structure rule: ${f.lines.toLocaleString()} lines in ${f.path}`,
         recommendation: "Split the file into feature components and add a size guard to CI.",
         scoreDelta: PENALTY.low,
         resource: f.path,
@@ -270,12 +271,12 @@ function treeSitterRules(files: FileEntry[]): RawFinding[] {
             id: fid("loop", f.path, line),
             pillar: "finops",
             severity: "medium",
-            scanner: "tree-sitter",
+            scanner: "static-rules",
             title: "Potential infinite useEffect render loop",
             humanSummary: `An effect updates '${culprit}' but also lists it as a dependency, so it can re-run every render and fire its calls in a loop.`,
             businessImpact:
               "A runaway loop can hammer paid APIs and the database thousands of times a minute, spiking your bill and risking downtime.",
-            evidence: `tree-sitter: effect sets '${culprit}' which is in its own dependency array (${f.path}:${line})`,
+            evidence: `structure rule: effect sets '${culprit}' which is in its own dependency array (${f.path}:${line})`,
             recommendation: `Remove '${culprit}' from the dependency array or memoize it so the effect runs only when its real inputs change.`,
             scoreDelta: PENALTY.medium,
             resource: f.path,
@@ -308,11 +309,11 @@ function supabaseRules(files: FileEntry[]): RawFinding[] {
         id: fid("permissive", f.path, line),
         pillar: "security",
         severity: "medium",
-        scanner: "supabase",
+        scanner: "static-rules",
         title: `Permissive RLS policy USING(true)${table ? ` on ${table}` : ""}`,
         humanSummary: "A row-level-security policy allows every authenticated user through, which defeats its purpose.",
         businessImpact: "Any logged-in user can read all rows for this table — data is exposed across accounts.",
-        evidence: `pg_policies: USING (true) in ${f.path}:${line}`,
+        evidence: `SQL rule: USING (true) policy in ${f.path}:${line}`,
         recommendation: "Scope the policy to the owner, e.g. using ( auth.uid() = user_id ), after confirming the ownership column.",
         scoreDelta: PENALTY.medium,
         resource: table ?? f.path,
@@ -335,11 +336,11 @@ function supabaseRules(files: FileEntry[]): RawFinding[] {
         id: fid("rls", f.path, line),
         pillar: "security",
         severity: "high",
-        scanner: "supabase",
+        scanner: "static-rules",
         title: `Row Level Security not enabled on ${table}`,
         humanSummary: `The ${table} table is created without RLS, so it has no access rules — any authenticated user can read and edit everyone's rows.`,
         businessImpact: "Private user data is readable and editable across accounts — a direct data-privacy breach.",
-        evidence: `pg_tables: no 'enable row level security' for ${table} in ${f.path}`,
+        evidence: `SQL rule: no 'enable row level security' for ${table} found in ${f.path}`,
         recommendation: "Enable RLS and add owner-scoped policies (auth.uid() = user_id).",
         scoreDelta: PENALTY.high,
         resource: table,
@@ -370,7 +371,7 @@ function contextRules(files: FileEntry[]): RawFinding[] {
         id: fid("rules", "root", 1),
         pillar: "code-health",
         severity: "low",
-        scanner: "tree-sitter",
+        scanner: "static-rules",
         title: "Missing security rules in AI context files",
         humanSummary:
           "Your AI rules files don't tell tools like Cursor and Claude about your security requirements, so they may reintroduce fixed issues.",
@@ -424,7 +425,7 @@ const PILLAR_WEIGHT: Record<Pillar, number> = {
   "code-health": 0.15,
 };
 
-function score(findings: Finding[]): { score: number; pillars: Record<Pillar, number> } {
+export function score(findings: Finding[]): { score: number; pillars: Record<Pillar, number> } {
   const pillars = {} as Record<Pillar, number>;
   for (const p of PILLARS) {
     const pen = findings.filter((f) => f.pillar === p).reduce((n, f) => n + PENALTY[f.severity], 0);
@@ -444,10 +445,10 @@ interface Phase {
 }
 
 const PHASES: Phase[] = [
-  { scanner: "gitleaks", label: "Secret scan (full history)", run: secretRules },
-  { scanner: "semgrep", label: "Static analysis (custom YAML rules)", run: semgrepRules },
-  { scanner: "tree-sitter", label: "AST analysis (render / effect graph)", run: treeSitterRules },
-  { scanner: "supabase", label: "Database inspection (pg_tables / pg_policies)", run: supabaseRules },
+  { scanner: "static-rules", label: "Secret patterns in current files", run: secretRules },
+  { scanner: "static-rules", label: "Code rules: auth, webhooks, paid routes", run: semgrepRules },
+  { scanner: "static-rules", label: "Structure heuristics: effects, file size", run: treeSitterRules },
+  { scanner: "static-rules", label: "SQL policy rules in repo files", run: supabaseRules },
 ];
 
 export async function runScan(
@@ -455,8 +456,8 @@ export async function runScan(
   emit: (e: ScanEvent) => void | Promise<void>,
   opts: { pace?: boolean } = {},
 ): Promise<ScanResult> {
-  seq = 0;
-  const scanId = `scan_${Date.now().toString(36)}`;
+  let seq = 0;
+  const scanId = `scan_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`;
   const started = Date.now();
   const events: ScanEvent[] = [];
   const pace = opts.pace ?? true;
@@ -485,12 +486,12 @@ export async function runScan(
 
   let files: FileEntry[];
   try {
-    await push("gitleaks", "phase", `Repository access confirmed · ${source.info.label}`);
+    await push("static-rules", "phase", `Reading source · ${source.info.label}`);
     files = await source.load();
-    await push("gitleaks", "info", `Loaded ${files.length} files @ ${source.info.branch}${source.info.commit ? ` (${source.info.commit})` : ""}`);
+    await push("static-rules", "info", `Loaded ${files.length} files @ ${source.info.branch}${source.info.commit ? ` (${source.info.commit})` : ""}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : "source unavailable";
-    await push("gitleaks", "fail", `Scan could not start: ${message}`);
+    await push("static-rules", "fail", `Scan could not start: ${message}`);
     const finished = Date.now();
     const empty = score([]);
     return {
@@ -519,20 +520,16 @@ export async function runScan(
         finding.context?.startLine,
       );
     }
-    await push(phase.scanner, "check", `${phase.label.split(" (")[0]} complete · ${raw.length} ${raw.length === 1 ? "finding" : "findings"}`);
+    await push(phase.scanner, "check", `${phase.label} · done ·${raw.length} ${raw.length === 1 ? "finding" : "findings"}`);
   }
 
-  // Context / compliance (runs after file load, attributed to tree-sitter)
   for (const r of contextRules(files)) {
     allFindings.push({ ...r, status: "open", detectedAt: now() });
   }
 
-  // Live probe is intentionally skipped (no SSRF / live URL probing in this build)
-  await push("live-url", "phase", "Live probe skipped (no authorized live URL)");
-
   const { score: readiness, pillars } = score(allFindings);
   const finished = Date.now();
-  await push("live-url", "phase", `Scan complete · ${allFindings.length} findings · readiness ${readiness}`);
+  await push("static-rules", "phase", `Scan complete · ${allFindings.length} findings · readiness ${readiness}`);
 
   return {
     scanId,
@@ -541,7 +538,7 @@ export async function runScan(
     startedAt: new Date(started).toISOString(),
     finishedAt: new Date(finished).toISOString(),
     durationMs: finished - started,
-    scanners: PHASES.map((p) => p.scanner).concat("live-url"),
+    scanners: ["static-rules"],
     fileCount: files.length,
     findings: allFindings,
     events,

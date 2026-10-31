@@ -17,7 +17,6 @@ export const DEMO_WORKSPACES: Workspace[] = [
     name: "alex-tech",
     slug: "alex-tech",
     plan: "pro",
-    environment: "production",
     memberCount: 3,
   },
   {
@@ -25,7 +24,6 @@ export const DEMO_WORKSPACES: Workspace[] = [
     name: "weekend-labs",
     slug: "weekend-labs",
     plan: "builder",
-    environment: "preview",
     memberCount: 1,
   },
 ];

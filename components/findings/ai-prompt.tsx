@@ -1,23 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { AiTool, Finding } from "@/lib/types";
 import { AI_TOOLS, AI_TOOL_ORDER } from "@/lib/constants";
 import { generateFixPrompt } from "@/lib/prompts";
 import { BrandGlyph, type BrandName } from "@/components/ui/brand-glyph";
 import { CopyButton } from "@/components/ui/copy-button";
-import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 
 export function AiPromptCustomizer({ finding }: { finding: Finding }) {
   const [tool, setTool] = useState<AiTool>("cursor");
   const generated = useMemo(() => generateFixPrompt(finding, tool), [finding, tool]);
   const [draft, setDraft] = useState(generated);
+  const [seen, setSeen] = useState(generated);
   const edited = draft !== generated;
 
-  // Regenerate when the tool changes.
-  useEffect(() => setDraft(generated), [generated]);
+  // Regenerate the draft when the tool or finding changes.
+  if (seen !== generated) {
+    setSeen(generated);
+    setDraft(generated);
+  }
 
   return (
     <div className="space-y-3">

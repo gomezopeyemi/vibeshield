@@ -126,6 +126,9 @@ function RecentActivity({ prs }: { prs: { id: string; number: number; title: str
   return (
     <Card className="p-5">
       <h2 className="text-[14px] font-semibold text-ink">Remediation activity</h2>
+      {prs.length === 0 && (
+        <p className="mt-3 text-[12.5px] text-muted">No remediation activity yet. Pull requests will appear here once the GitHub App is connected.</p>
+      )}
       <ul className="mt-3 space-y-3">
         {prs.map((pr) => (
           <li key={pr.id} className="flex items-start gap-2.5">

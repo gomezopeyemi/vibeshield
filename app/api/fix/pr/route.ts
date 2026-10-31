@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parse, ok, requireIntegration } from "@/lib/api";
+import { parse, notImplemented, requireIntegration } from "@/lib/api";
 
 const schema = z.object({
   findingId: z.string().min(1),
@@ -17,5 +17,5 @@ export async function POST(req: Request) {
 
   // TODO(live): generate patch via Claude API, validate it, create a branch and
   // open a PR via Octokit, then return { number, url, state }.
-  return ok({ created: false });
+  return notImplemented("Remediation PR creation is not built yet.");
 }

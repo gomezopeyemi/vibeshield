@@ -34,6 +34,7 @@ export type ScanStatus =
   | "cancelled";
 
 export type ScannerKind =
+  | "static-rules"
   | "gitleaks"
   | "semgrep"
   | "tree-sitter"
@@ -89,7 +90,6 @@ export interface Workspace {
   name: string;
   slug: string;
   plan: PlanTier;
-  environment: "production" | "staging" | "preview";
   memberCount: number;
 }
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parse, ok, requireIntegration } from "@/lib/api";
+import { parse, notImplemented, requireIntegration } from "@/lib/api";
 
 const schema = z.object({
   enabled: z.boolean(),
@@ -20,5 +20,5 @@ export async function POST(req: Request) {
 
   // TODO(live): arm/disarm the spend guard and return backend confirmation.
   // Until confirmed by the backend, a UI toggle is never treated as "active".
-  return ok({ armed: false, confirmedByBackend: false });
+  return notImplemented("The spend kill switch is not built yet.");
 }

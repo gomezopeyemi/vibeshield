@@ -63,15 +63,20 @@ export function CommandMenu() {
     return () => window.removeEventListener("keydown", onKey);
   }, [setCommandOpen]);
 
-  useEffect(() => {
+  const [wasOpen, setWasOpen] = useState(commandOpen);
+  if (wasOpen !== commandOpen) {
+    setWasOpen(commandOpen);
     if (commandOpen) {
       setQuery("");
       setActive(0);
-      setTimeout(() => inputRef.current?.focus(), 30);
     }
-  }, [commandOpen]);
+  }
 
-  useEffect(() => setActive(0), [query]);
+  useEffect(() => {
+    if (!commandOpen) return;
+    const t = setTimeout(() => inputRef.current?.focus(), 30);
+    return () => clearTimeout(t);
+  }, [commandOpen]);
 
   const go = (href: string) => {
     setCommandOpen(false);
@@ -90,7 +95,10 @@ export function CommandMenu() {
           <input
             ref={inputRef}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActive(0);
+            }}
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") {
                 e.preventDefault();

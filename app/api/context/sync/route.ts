@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parse, ok, requireIntegration } from "@/lib/api";
+import { parse, notImplemented, requireIntegration } from "@/lib/api";
 
 const schema = z.object({
   file: z.enum([".cursorrules", ".windsurfrules", "CLAUDE.md"]),
@@ -17,5 +17,5 @@ export async function POST(req: Request) {
 
   // TODO(live): generate the rules content from repo structure + security rules
   // and open a PR updating the selected file.
-  return ok({ synced: false, file: parsed.data.file });
+  return notImplemented("Context file sync is not built yet.");
 }

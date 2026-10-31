@@ -17,6 +17,33 @@ export const dynamic = "force-dynamic";
 
 const delta = (n: number) => (n > 0 ? `+${n}` : String(n));
 
+function Group({ title, tone, items, empty }: { title: string; tone: "critical" | "success" | "muted"; items: Finding[]; empty: string }) {
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-line p-4">
+        <span className={cn("size-2.5 rounded-full", tone === "critical" ? "bg-critical" : tone === "success" ? "bg-success" : "bg-faint")} />
+        <h3 className="text-[14px] font-semibold text-ink">{title}</h3>
+        <span className="ml-auto text-[12px] tabular text-muted">{items.length}</span>
+      </div>
+      {items.length === 0 ? (
+        <p className="p-4 text-[12.5px] text-muted">{empty}</p>
+      ) : (
+        <ul>
+          {items.map((f) => (
+            <li key={f.id} className="flex items-start gap-3 border-b border-line p-4 last:border-0">
+              <SeverityBadge severity={f.severity} size="sm" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[13.5px] font-medium text-ink">{f.title}</p>
+                <p className="truncate font-mono text-[11.5px] text-muted">{f.context ? `${f.context.path}:${f.context.startLine}` : f.resource}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
 export default async function ComparePage({
   searchParams,
 }: {
@@ -45,31 +72,6 @@ export default async function ComparePage({
   const fromRun = from ? await getRun(from) : runs[1];
   if (!toRun || !fromRun) notFound();
   const d = diffScans(fromRun, toRun);
-
-  const Group = ({ title, tone, items, empty }: { title: string; tone: "critical" | "success" | "muted"; items: Finding[]; empty: string }) => (
-    <Card className="overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-line p-4">
-        <span className={cn("size-2.5 rounded-full", tone === "critical" ? "bg-critical" : tone === "success" ? "bg-success" : "bg-faint")} />
-        <h3 className="text-[14px] font-semibold text-ink">{title}</h3>
-        <span className="ml-auto text-[12px] tabular text-muted">{items.length}</span>
-      </div>
-      {items.length === 0 ? (
-        <p className="p-4 text-[12.5px] text-muted">{empty}</p>
-      ) : (
-        <ul>
-          {items.map((f) => (
-            <li key={f.id} className="flex items-start gap-3 border-b border-line p-4 last:border-0">
-              <SeverityBadge severity={f.severity} size="sm" />
-              <div className="min-w-0 flex-1">
-                <p className="text-[13.5px] font-medium text-ink">{f.title}</p>
-                <p className="truncate font-mono text-[11.5px] text-muted">{f.context ? `${f.context.path}:${f.context.startLine}` : f.resource}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
-  );
 
   return (
     <div className="space-y-6">

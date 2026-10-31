@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parse, ok, requireIntegration } from "@/lib/api";
+import { parse, notImplemented, requireIntegration } from "@/lib/api";
 
 const schema = z.object({
   deploymentUrl: z.string().url().optional(),
@@ -19,5 +19,5 @@ export async function POST(req: Request) {
 
   // TODO(live): launch a Playwright run on an ephemeral worker and stream steps,
   // screenshots and video artifacts back via Realtime.
-  return ok({ started: false });
+  return notImplemented("Smoke test runs are not built yet.");
 }

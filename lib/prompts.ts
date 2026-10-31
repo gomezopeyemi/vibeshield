@@ -15,7 +15,7 @@ const COMMON_REGRESSION =
 
 const TOOL_PROFILES: Record<AiTool, ToolProfile> = {
   cursor: {
-    intro: (f) =>
+    intro: () =>
       `You are editing this repository in Cursor. Use the codebase context to fix the following production-readiness issue. Make a minimal, surgical change and explain each edit in your summary.`,
     constraints: [
       "Edit only the files required for this fix; reference symbols by their real paths.",

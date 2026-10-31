@@ -4,7 +4,7 @@
 readiness, security and guardrail platform for apps built with AI dev tools
 (Cursor, Lovable, Bolt, v0, Windsurf, Replit, Claude Code).
 
-> **Build status:** `next build` passes · TypeScript clean · all 6 screens live.
+> **Build status:** `next build` passes · TypeScript clean · all 6 screens built (scanner is real; most modules still demo data; no auth yet).
 > See [`IMPLEMENTATION_STATUS.md`](./IMPLEMENTATION_STATUS.md) for exactly what's
 > real vs. awaiting backend credentials.
 

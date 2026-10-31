@@ -6,7 +6,6 @@ import { useSession } from "@/components/providers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Icon } from "@/components/ui/icon";
-import { Badge } from "@/components/ui/badge";
 import { BrandGlyph } from "@/components/ui/brand-glyph";
 import { ConnectionPill } from "@/components/ui/status-pill";
 import {

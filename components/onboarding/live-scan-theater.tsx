@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusPill } from "@/components/ui/status-pill";
 
 const SCANNER_LABEL: Record<ScannerKind, string> = {
+  "static-rules": "Static rules",
   gitleaks: "Gitleaks",
   semgrep: "Semgrep",
   "tree-sitter": "Tree-sitter",
@@ -75,7 +76,7 @@ export function LiveScanTheater({
             <StatusPill tone="muted" label="Queued" solid />
           )}
         </div>
-        <Badge tone="success" size="sm"><Icon name="Radio" className="!size-3" /> Real scan</Badge>
+        <Badge tone="info" size="sm"><Icon name="Radio" className="!size-3" /> Static rules · current files</Badge>
       </div>
 
       <div className="flex items-center justify-between border-b border-line bg-surface-2/40 px-4 py-2 text-[11.5px]">
@@ -85,8 +86,8 @@ export function LiveScanTheater({
         <span className="font-mono tabular text-ink-2">{mm}:{ss} elapsed</span>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 border-b border-line px-4 py-2.5">
-        {(["gitleaks", "semgrep", "tree-sitter", "supabase", "live-url"] as ScannerKind[]).map((s) => {
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line px-4 py-2.5">
+        {(["static-rules"] as ScannerKind[]).map((s) => {
           const seen = events.some((e) => e.scanner === s);
           const active = status === "running" && last?.scanner === s;
           return (
@@ -106,6 +107,9 @@ export function LiveScanTheater({
             </span>
           );
         })}
+        <span className="text-[11px] text-faint">
+          Not enabled yet: Gitleaks history scan, Semgrep, Tree-sitter, live database inspection, URL probing.
+        </span>
       </div>
 
       <div ref={logRef} className="min-h-[260px] flex-1 overflow-y-auto px-2 py-2">
@@ -117,7 +121,7 @@ export function LiveScanTheater({
             <div>
               <p className="text-[13px] font-medium text-ink">Ready to scan</p>
               <p className="mt-0.5 max-w-xs text-[12px] text-muted">
-                Runs the real analyzer (Gitleaks · Semgrep · Tree-sitter · Supabase) and streams findings as they&apos;re discovered.
+                Runs VibeShield&apos;s static rules over the current files and streams findings as they&apos;re discovered. Git history, live database and URL checks are not part of this scan yet.
               </p>
             </div>
             <Button variant="primary" size="sm" disabled={starting} onClick={onStart}>

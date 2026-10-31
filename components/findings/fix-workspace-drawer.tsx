@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { cn, formatTime, timeAgo } from "@/lib/utils";
 import type { Finding, PullRequest } from "@/lib/types";
 import { PILLARS } from "@/lib/constants";
@@ -45,7 +45,12 @@ export function FixWorkspaceDrawer({
   onOpenChange: (v: boolean) => void;
 }) {
   const [tab, setTab] = useState<FixTab>(initialTab);
-  useEffect(() => setTab(initialTab), [initialTab, finding?.id]);
+  const tabKey = `${initialTab}:${finding?.id ?? ""}`;
+  const [seenKey, setSeenKey] = useState(tabKey);
+  if (seenKey !== tabKey) {
+    setSeenKey(tabKey);
+    setTab(initialTab);
+  }
 
   if (!finding) return null;
   const pillar = PILLARS[finding.pillar];
