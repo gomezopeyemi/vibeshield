@@ -28,7 +28,7 @@ Needed because later stages assume them.
 - `/api/scan*` require a session.
 - **Accept:** full journey register → verify → login → persist session → logout → recover → login, tested; unauthenticated API calls return 401; protected pages redirect.
 
-## Stage 2 — Multi-tenant database
+## Stage 2 — Multi-tenant database — in progress (slice 1: identity/workspaces/roles written and tested locally)
 - Versioned SQL migrations committed in `supabase/migrations`; identity, workspace, membership, invitations, repositories, scans, scan_events, findings, evidence, score_snapshots, audit_logs first; later domains arrive with their stage.
 - Helper functions, RLS on every table, role matrix, Realtime publication for `scan_events`.
 - Data-access layer scoped by workspace; retire `vs_scans`.

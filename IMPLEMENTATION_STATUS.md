@@ -8,6 +8,33 @@ queue are now driven by real scanner output._
 
 **Gates (2026-10-31, after Stage 1):** `npm run typecheck` ✓ · `npm run lint` ✓ 0 errors / 0 warnings · `npm test` ✓ 68 tests (8 files) · `npm run build` ✓. All four must stay green.
 
+## Stage 2 — Multi-tenant database (IN PROGRESS)
+
+### Slice 1 — identity, workspaces, roles (written + tested locally, 2026-11-01 · NOT applied to Supabase yet)
+
+**Built**
+- `supabase/migrations/20261101000100_identity_workspaces.sql`: `profiles`, `workspaces`, `workspace_members`, enum `workspace_role` (owner / admin / developer / viewer).
+- RLS on all three tables via `SECURITY DEFINER` helpers in a non-exposed `private` schema (`is_workspace_member`, `has_workspace_role`, `workspace_role_of`, `shares_workspace_with`), `search_path = ''`, no `USING (true)`.
+- Explicit privileges: Supabase's default ALL grants are revoked; `anon` gets nothing; column-level `UPDATE` grants (users can rename a workspace but never change its `plan`, which is reserved for billing).
+- `create_workspace(name, slug)` creates the workspace and its owner membership atomically.
+- Sign-up trigger: every new auth user gets a profile (name from sign-up metadata), a `Personal` workspace and an owner membership.
+- Membership guard trigger: nobody changes their own role or removes themselves; only owners manage owners; a workspace always keeps at least one owner. Account deletion removes memberships and drops the user's now-empty workspaces.
+- `WorkspaceRole` / `WorkspaceMember` added to `lib/types.ts`.
+
+**Verified**
+- `tests/db/` runs the migration on a real Postgres 18 (PGlite, in-process) with Supabase's roles, `auth.users`, `auth.uid()` and default grants recreated. 17 tests: RLS everywhere, anon locked out, sign-up bootstrap, cross-workspace isolation, each role's permissions, owner rules, plan protection, profile edits, account deletion.
+- Mutation check: making workspaces world-readable fails 3 tests; dropping the grant revokes fails 3 tests.
+- Gates: typecheck ✓ · lint ✓ · 97 tests ✓ · build ✓.
+
+**Not verified**
+- Not applied to the real project (`zwowuzkxgsvpfcymysca`): the Supabase connector cannot reach it. PGlite stubs Supabase's `auth` schema, so behaviour on the hosted database still needs a check after applying.
+- Not wired into the app yet: the shell still uses the placeholder "Personal" workspace and scans are still stored per user in memory.
+
+**Next slices**
+2. App wiring: list the user's real workspaces in the switcher, a "New workspace" form via `create_workspace`, members page.
+3. Scans, scan events, findings, score snapshots tables (workspace-owned) + move scan storage off memory; retire `vs_scans`.
+4. Invitations, audit log, Realtime for scan events.
+
 ## Stage 1 — Public site & authentication (CODE COMPLETE, 2026-10-31 · live verification pending)
 
 **Not "done" until the live journey below passes against the real VibeShield Supabase project.** No keys were available this session (by decision ADR-002 the founder creates the project and owns the keys).

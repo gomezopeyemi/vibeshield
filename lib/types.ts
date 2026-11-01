@@ -117,12 +117,25 @@ export interface User {
   plan: PlanTier;
 }
 
+/** Mirrors the `public.workspace_role` enum (supabase/migrations). */
+export type WorkspaceRole = "owner" | "admin" | "developer" | "viewer";
+
 export interface Workspace {
   id: string;
   name: string;
   slug: string;
   plan: PlanTier;
   memberCount: number;
+  /** The signed-in user's role here; absent for demo fixtures. */
+  role?: WorkspaceRole;
+}
+
+export interface WorkspaceMember {
+  workspaceId: string;
+  userId: string;
+  role: WorkspaceRole;
+  fullName: string;
+  joinedAt: string;
 }
 
 export interface Repository {
