@@ -36,9 +36,11 @@ const SUPABASE_STUB = `
 
 const MIGRATIONS = path.join(process.cwd(), "supabase", "migrations");
 
-export async function freshDatabase(): Promise<PGlite> {
+/** `beforeMigrations` runs against the bare Supabase stub, e.g. to create accounts that predate the schema. */
+export async function freshDatabase(opts: { beforeMigrations?: (db: PGlite) => Promise<void> } = {}): Promise<PGlite> {
   const db = new PGlite();
   await db.exec(SUPABASE_STUB);
+  await opts.beforeMigrations?.(db);
   for (const file of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
     await db.exec(readFileSync(path.join(MIGRATIONS, file), "utf8"));
   }

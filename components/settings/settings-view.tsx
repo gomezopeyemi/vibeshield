@@ -13,9 +13,13 @@ import { Icon } from "@/components/ui/icon";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { WorkspaceSettingsForm } from "@/components/workspaces/workspace-settings-form";
+import type { WorkspaceMember } from "@/lib/types";
 
-export function SettingsView() {
-  const { appEnv, demoSession, user, workspace, plan } = useSession();
+/** `members` is null when the roster couldn't be loaded (or isn't real yet). */
+export function SettingsView({ members }: { members: WorkspaceMember[] | null }) {
+  const { appEnv, demoSession, user, workspace, workspaceState, workspaceMessage, plan } = useSession();
+  const canManage = workspaceState === "ready" && (workspace.role === "owner" || workspace.role === "admin");
   const [note, setNote] = useState<string | null>(null);
 
   return (
@@ -42,12 +46,25 @@ export function SettingsView() {
       </Section>
 
       {/* Workspace */}
-      <Section title="Workspace" description="Settings for the current workspace.">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Workspace name"><Input defaultValue={workspace.name} /></Field>
-          <Field label="Slug"><Input defaultValue={workspace.slug} /></Field>
-          <Field label="Environment"><Input defaultValue={appEnv} disabled /></Field>
-        </div>
+      <Section
+        title="Workspace"
+        description={canManage ? "Rename this workspace or change its URL." : "Settings for the current workspace."}
+      >
+        {canManage ? (
+          <WorkspaceSettingsForm key={workspace.id} workspace={workspace} />
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="Workspace name"><Input value={workspace.name} readOnly disabled /></Field>
+            <Field label="URL"><Input value={workspace.slug} readOnly disabled className="font-mono" /></Field>
+            <Field label="Environment"><Input value={appEnv} readOnly disabled /></Field>
+          </div>
+        )}
+        {workspaceState === "ready" && !canManage && (
+          <p className="mt-3 text-[12px] text-muted">Only owners and admins can change workspace settings. Your role: <span className="capitalize">{workspace.role}</span>.</p>
+        )}
+        {(workspaceState === "not_provisioned" || workspaceState === "error") && (
+          <p className="mt-3 text-[12px] text-warning-ink">{workspaceMessage}</p>
+        )}
       </Section>
 
       {/* Billing */}
@@ -108,19 +125,32 @@ export function SettingsView() {
       </Section>
 
       {/* Team */}
-      <Section title="Team" description={`${workspace.memberCount} member${workspace.memberCount === 1 ? "" : "s"} in this workspace.`}>
-        <div className="space-y-2">
-          {[{ n: user.name, e: user.email, r: "Owner" }, { n: "Sam Rivera", e: "sam@alex-tech.app", r: "Member" }].slice(0, workspace.memberCount).map((m) => (
-            <div key={m.e} className="flex items-center gap-3 rounded-[9px] border border-line bg-surface p-3">
-              <Avatar name={m.n} size={32} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[12.5px] font-medium text-ink">{m.n}</p>
-                <p className="truncate text-[11px] text-faint">{m.e}</p>
+      <Section
+        title="Team"
+        description={members ? `${members.length} member${members.length === 1 ? "" : "s"} in this workspace. Invitations are coming next.` : undefined}
+      >
+        {members ? (
+          <div className="space-y-2">
+            {members.map((m) => (
+              <div key={m.userId} className="flex items-center gap-3 rounded-[9px] border border-line bg-surface p-3">
+                <Avatar name={m.fullName} size={32} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12.5px] font-medium text-ink">
+                    {m.fullName}
+                    {m.userId === user.id && <span className="ml-1.5 text-[11px] font-normal text-faint">(you)</span>}
+                  </p>
+                </div>
+                <Badge tone={m.role === "owner" ? "brand" : "muted"} size="sm" className="capitalize">{m.role}</Badge>
               </div>
-              <Badge tone="muted" size="sm">{m.r}</Badge>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[12.5px] text-muted">
+            {workspaceState === "demo"
+              ? "Team members aren't available in the demo session."
+              : "The team roster isn't available until workspaces are set up."}
+          </p>
+        )}
       </Section>
 
       {/* Danger */}
@@ -132,8 +162,8 @@ export function SettingsView() {
             <p className="text-[12.5px] font-medium text-ink">Delete workspace</p>
             <p className="text-[11.5px] text-muted">Permanently removes this workspace and all its scans.</p>
           </div>
-          <Button variant="danger-soft" size="sm" onClick={() => setNote("Deleting a workspace requires a connected backend and an explicit confirmation step. Nothing was deleted.")}>
-            <Icon name="AlertTriangle" /> Delete workspace
+          <Button variant="danger-soft" size="sm" disabled title="Workspace deletion isn't available yet">
+            <Icon name="AlertTriangle" /> Delete workspace · coming soon
           </Button>
         </div>
       </Card>

@@ -6,24 +6,13 @@ import {
   useState,
   useCallback,
   useMemo,
+  useTransition,
   type ReactNode,
 } from "react";
-import type { PlanTier, Repository, SessionUser, User, Workspace } from "@/lib/types";
+import type { PlanTier, Repository, SessionUser, User, Workspace, WorkspaceContext, WorkspaceState } from "@/lib/types";
+import { switchWorkspace } from "@/lib/workspaces/actions";
 import type { AppEnv } from "@/lib/config";
-import {
-  DEMO_REPOSITORIES,
-  DEMO_USER,
-  DEMO_WORKSPACES,
-} from "@/lib/demo/session";
-
-// Real accounts have no workspace records until Stage 2; this placeholder is never persisted.
-const PERSONAL_WORKSPACE: Workspace = {
-  id: "ws_personal",
-  name: "Personal",
-  slug: "personal",
-  plan: "free",
-  memberCount: 1,
-};
+import { DEMO_REPOSITORIES, DEMO_USER } from "@/lib/demo/session";
 
 interface SessionValue {
   /** Deployment environment from the server (VIBESHIELD_ENV), not a fixture. */
@@ -33,6 +22,10 @@ interface SessionValue {
   user: User;
   workspace: Workspace;
   workspaces: Workspace[];
+  /** Where the workspace list came from; only "ready" means real, editable rows. */
+  workspaceState: WorkspaceState;
+  workspaceMessage?: string;
+  switchingWorkspace: boolean;
   repositories: Repository[];
   repository: Repository | null;
   plan: PlanTier;
@@ -56,16 +49,24 @@ export function AppProvider({
   children,
   appEnv,
   sessionUser,
+  workspaceContext,
 }: {
   children: ReactNode;
   appEnv: AppEnv;
   sessionUser: SessionUser;
+  workspaceContext: WorkspaceContext;
 }) {
   const demoSession = sessionUser.demo;
-  const workspaces = useMemo(() => (demoSession ? DEMO_WORKSPACES : [PERSONAL_WORKSPACE]), [demoSession]);
+  const { workspaces, state: workspaceState, message: workspaceMessage } = workspaceContext;
   const repositories = useMemo(() => (demoSession ? DEMO_REPOSITORIES : []), [demoSession]);
 
-  const [workspace, setWorkspaceState] = useState<Workspace>(workspaces[0]);
+  // Real workspaces: the server (cookie) owns the selection. Demo fixtures switch locally.
+  const [demoWorkspaceId, setDemoWorkspaceId] = useState(workspaceContext.current.id);
+  const [switchingWorkspace, startSwitch] = useTransition();
+  const workspace =
+    workspaceState === "demo"
+      ? (workspaces.find((w) => w.id === demoWorkspaceId) ?? workspaceContext.current)
+      : workspaceContext.current;
   const [repository, setRepositoryState] = useState<Repository | null>(repositories[0] ?? null);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -74,10 +75,13 @@ export function AppProvider({
 
   const setWorkspace = useCallback(
     (id: string) => {
-      const ws = workspaces.find((w) => w.id === id);
-      if (ws) setWorkspaceState(ws);
+      if (workspaceState === "demo") return setDemoWorkspaceId(id);
+      if (workspaceState !== "ready") return;
+      startSwitch(async () => {
+        await switchWorkspace(id);
+      });
     },
-    [workspaces],
+    [workspaceState],
   );
 
   const setRepository = useCallback(
@@ -104,13 +108,16 @@ export function AppProvider({
       user,
       workspace,
       workspaces,
+      workspaceState,
+      workspaceMessage,
+      switchingWorkspace,
       repositories,
       repository,
       plan: workspace.plan,
       setWorkspace,
       setRepository,
     }),
-    [appEnv, demoSession, user, workspace, workspaces, repositories, repository, setWorkspace, setRepository],
+    [appEnv, demoSession, user, workspace, workspaces, workspaceState, workspaceMessage, switchingWorkspace, repositories, repository, setWorkspace, setRepository],
   );
 
   const ui = useMemo<UIValue>(

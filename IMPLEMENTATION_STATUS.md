@@ -30,10 +30,26 @@ queue are now driven by real scanner output._
 - Not applied to the real project (`zwowuzkxgsvpfcymysca`): the Supabase connector cannot reach it. PGlite stubs Supabase's `auth` schema, so behaviour on the hosted database still needs a check after applying.
 - Not wired into the app yet: the shell still uses the placeholder "Personal" workspace and scans are still stored per user in memory.
 
+### Slice 2 — app wiring for workspaces (code complete, 2026-11-05 · live check blocked on applying migrations)
+
+**Built**
+- Migration `20261105000100_backfill_and_profile_link.sql`: backfills a profile + Personal workspace + owner membership for accounts created before slice 1 (including the founder's existing account); links `workspace_members.user_id` → `profiles` so the roster can show names.
+- `lib/workspaces/data.ts` (DAL, runs as the user so RLS decides): `getWorkspaceContext()` returns `ready` / `demo` / `not_provisioned` / `error`, with every row validated by zod; `listMembers()`.
+- `lib/workspaces/actions.ts`: `createWorkspace` (via `create_workspace()`), `switchWorkspace` (only to a workspace the DB shows the caller; stored in an httpOnly cookie), `renameWorkspace` (zero rows updated ⇒ "only owners and admins"). Postgres errors are translated (taken slug, check failure, permission, schema missing). `refresh()` re-renders after each change.
+- UI: real workspace switcher with roles; working **New workspace** dialog with slug suggestion; Settings shows a rename form for owners/admins (read-only with an explanation otherwise) and the **real team roster**. "Delete workspace" is disabled ("coming soon") instead of showing a notice.
+- Honest states: without the tables, the app keeps a temporary Personal workspace and shows a banner saying workspaces aren't set up; "New workspace" says "needs setup". The demo session keeps its fixtures and never touches the database.
+
+**Verified**
+- 21 new tests (118 total): 3 DB tests for the backfill + roster join; 18 app-layer tests (state detection, cookie selection ignoring foreign ids, demo isolation, validation before any DB call, error translation, RLS zero-row handling).
+- The live project returns `PGRST205` (missing table) and `PGRST202` (missing function), exactly the codes used to detect "not set up".
+- Gates: typecheck ✓ · lint ✓ · 118 tests ✓ · build ✓. Production server: public pages 200, app pages 307 → login, API 401, clean log.
+
+**Not verified**
+- Signed-in UI with real workspaces: needs the two migrations applied to `zwowuzkxgsvpfcymysca` and a verified account. Switcher, dialog and Settings were not checked in a browser.
+
 **Next slices**
-2. App wiring: list the user's real workspaces in the switcher, a "New workspace" form via `create_workspace`, members page.
-3. Scans, scan events, findings, score snapshots tables (workspace-owned) + move scan storage off memory; retire `vs_scans`.
-4. Invitations, audit log, Realtime for scan events.
+3. Scans, scan events, findings, score snapshots (workspace-owned) + move scan storage off memory; retire `vs_scans`.
+4. Invitations and member management (role changes, removal), audit log, Realtime for scan events.
 
 ## Stage 1 — Public site & authentication (CODE COMPLETE, 2026-10-31 · live verification pending)
 

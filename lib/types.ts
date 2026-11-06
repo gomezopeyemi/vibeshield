@@ -138,6 +138,17 @@ export interface WorkspaceMember {
   joinedAt: string;
 }
 
+/** ready: real rows · demo: fixture session · not_provisioned: migrations not applied · error: query failed. */
+export type WorkspaceState = "ready" | "demo" | "not_provisioned" | "error";
+
+export interface WorkspaceContext {
+  state: WorkspaceState;
+  workspaces: Workspace[];
+  current: Workspace;
+  /** Why the state isn't "ready", for the banner. */
+  message?: string;
+}
+
 export interface Repository {
   id: string;
   owner: string;

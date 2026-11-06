@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth/actions";
 import { useSession, useUI } from "@/components/providers";
@@ -16,11 +17,15 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { NewWorkspaceDialog } from "@/components/workspaces/new-workspace-dialog";
 
 export function Topbar() {
-  const { appEnv, workspace, workspaces, repositories, repository, setWorkspace, setRepository } =
-    useSession();
+  const {
+    appEnv, workspace, workspaces, workspaceState, switchingWorkspace,
+    repositories, repository, setWorkspace, setRepository,
+  } = useSession();
   const { setMobileNavOpen, setCommandOpen } = useUI();
+  const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
 
   const envTone = appEnv === "production" ? "success" : appEnv === "development" ? "neutral" : "warning";
 
@@ -39,7 +44,7 @@ export function Topbar() {
       <DropdownMenu>
         <DropdownMenuTrigger className="flex h-9 items-center gap-1.5 rounded-[8px] px-2 text-[13px] font-medium text-ink outline-none transition-colors hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-brand/40">
           <div className="flex size-5 items-center justify-center rounded-[5px] bg-ink text-[9px] font-semibold text-white">
-            {workspace.name.slice(0, 2).toUpperCase()}
+            {switchingWorkspace ? <Icon name="Loader2" className="size-3 animate-spin" /> : workspace.name.slice(0, 2).toUpperCase()}
           </div>
           <span className="hidden max-w-[120px] truncate sm:inline">{workspace.name}</span>
           <Icon name="ChevronsUpDown" className="size-3.5 text-faint" />
@@ -52,15 +57,23 @@ export function Topbar() {
                 {w.name.slice(0, 2).toUpperCase()}
               </div>
               <span className="flex-1 truncate">{w.name}</span>
+              {w.role && w.id !== workspace.id && <span className="text-[11px] capitalize text-faint">{w.role}</span>}
               {w.id === workspace.id && <Icon name="Check" className="size-4 text-brand" />}
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
-          <DropdownMenuItem disabled>
-            <Icon name="Plus" /> New workspace · coming soon
-          </DropdownMenuItem>
+          {workspaceState === "ready" ? (
+            <DropdownMenuItem onSelect={() => setNewWorkspaceOpen(true)}>
+              <Icon name="Plus" /> New workspace
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem disabled>
+              <Icon name="Plus" /> New workspace · {workspaceState === "demo" ? "not in demo" : "needs setup"}
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
+      <NewWorkspaceDialog open={newWorkspaceOpen} onOpenChange={setNewWorkspaceOpen} />
 
       <span className="hidden text-line-strong sm:inline">/</span>
 
