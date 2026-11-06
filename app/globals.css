@@ -5,7 +5,8 @@
    Palette is intentionally restrained: white + neutral grey + dark ink type
    + a single restrained blue accent. Green / amber / coral communicate status
    only. Dark surfaces are reserved for code & terminal inspection areas.
-   NO purple as a brand colour anywhere.
+   NO purple in the product app. The public marketing site has its own
+   purple palette (--mk-*, chosen by the founder), scoped to app/(marketing).
    ========================================================================== */
 
 :root {
@@ -121,8 +122,12 @@
   --breakpoint-xs: 26rem;
 }
 
-* {
-  border-color: var(--line);
+/* Defaults live in the base layer so Tailwind utilities (border-*, tracking-*)
+   can override them; unlayered rules would beat every utility. */
+@layer base {
+  * {
+    border-color: var(--line);
+  }
 }
 
 html {
@@ -141,8 +146,10 @@ body {
 }
 
 /* Typographic rhythm */
-h1, h2, h3, h4, h5 {
-  letter-spacing: -0.012em;
+@layer base {
+  h1, h2, h3, h4, h5 {
+    letter-spacing: -0.012em;
+  }
 }
 
 ::selection {
@@ -268,3 +275,89 @@ h1, h2, h3, h4, h5 {
 .vs-pop[data-state="delayed-open"] { animation: vs-pop-in 0.14s ease; }
 .vs-dialog[data-state="open"] { animation: vs-dialog-in 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
 .vs-drawer[data-state="open"] { animation: vs-slide-right 0.26s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* ============================================================================
+   Marketing site (app/(marketing) only). Separate palette, fonts and motion.
+   ========================================================================== */
+
+:root {
+  --mk-hero: #968ff7;
+  --mk-mock: #968bf1;
+  --mk-lavender: #c3bafd;
+  --mk-offwhite: #fcfcfa;
+  --mk-cta: #280049;
+  --mk-footer: #1f013d;
+  --mk-card: #ebeef5;
+  --mk-slate: #55506f;
+  --mk-violet: #5a00c8;
+  --mk-ink: #1f013d;
+  --mk-critical: #d6453d;
+  --mk-green: #1f9d63;
+
+  /* Driven by components/marketing/background-observer.tsx */
+  --page-bg: var(--mk-offwhite);
+  --page-fg: var(--mk-ink);
+}
+
+/* The home page starts on the hero colour before any script runs (no flash). */
+html:has([data-page-theme="hero"]) {
+  --page-bg: var(--mk-hero);
+}
+
+@theme inline {
+  --color-mk-hero: var(--mk-hero);
+  --color-mk-mock: var(--mk-mock);
+  --color-mk-lavender: var(--mk-lavender);
+  --color-mk-offwhite: var(--mk-offwhite);
+  --color-mk-cta: var(--mk-cta);
+  --color-mk-footer: var(--mk-footer);
+  --color-mk-card: var(--mk-card);
+  --color-mk-slate: var(--mk-slate);
+  --color-mk-violet: var(--mk-violet);
+  --color-mk-ink: var(--mk-ink);
+  --color-mk-critical: var(--mk-critical);
+  --color-mk-green: var(--mk-green);
+  --font-display: var(--font-mk-display), "Iowan Old Style", Georgia, serif;
+  --font-mk: var(--font-mk-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+.mk-root {
+  background-color: var(--page-bg);
+  color: var(--page-fg);
+  transition: background-color 0.7s ease, color 0.7s ease;
+}
+
+.mk-no-scrollbar {
+  scrollbar-width: none;
+}
+.mk-no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes mk-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes mk-menu-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.mk-menu[data-state="open"] {
+  animation: mk-menu-in 0.18s ease-out;
+}
+.mk-menu[data-state="closed"] {
+  animation: mk-menu-out 0.14s ease-in forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mk-root {
+    transition: none;
+  }
+  .mk-menu[data-state] {
+    animation: none;
+  }
+}

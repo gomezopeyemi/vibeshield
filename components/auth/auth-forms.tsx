@@ -114,7 +114,8 @@ export function LoginForm({ next, disabled }: { next?: string; disabled: boolean
   );
 }
 
-export function SignupForm({ disabled }: { disabled: boolean }) {
+/** `defaultEmail` comes from the home page's email box (validated by the page). */
+export function SignupForm({ disabled, defaultEmail }: { disabled: boolean; defaultEmail?: string }) {
   const [state, action, pending] = useActionState(signUp, IDLE);
   return (
     <form action={action} className="space-y-4" noValidate>
@@ -127,7 +128,7 @@ export function SignupForm({ disabled }: { disabled: boolean }) {
       <Field label="Work email" errors={state.fieldErrors?.email}>
         {(id, d) => (
           <Input id={id} aria-describedby={d} name="email" type="email" autoComplete="email" required
-            defaultValue={state.values?.email} invalid={Boolean(d)} disabled={disabled} />
+            defaultValue={state.values?.email ?? defaultEmail} invalid={Boolean(d)} disabled={disabled} />
         )}
       </Field>
       <Field label="Password" errors={state.fieldErrors?.password}>

@@ -1,54 +1,64 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Icon } from "@/components/ui/icon";
+import { Check, Info } from "lucide-react";
 import { PLANS } from "@/lib/constants";
+import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
+import { PageIntro } from "@/components/marketing/page-intro";
+import { PillLink } from "@/components/marketing/pill-link";
 
 export const metadata: Metadata = { title: "Pricing" };
 
 export default function PricingPage() {
   return (
-    <div className="mx-auto max-w-[1120px] px-4 py-14 sm:px-6 sm:py-20">
-      <h1 className="text-[32px] font-semibold tracking-tight text-ink sm:text-[40px]">Pricing</h1>
-      <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted">
+    <div className="mx-auto max-w-[1240px] px-4 py-16 sm:px-6 sm:py-24">
+      <PageIntro eyebrow="Plans" title="Pricing">
         Start free. Paid plans unlock as their features ship.
-      </p>
+      </PageIntro>
 
-      <div className="mt-6 flex gap-2.5 rounded-[10px] border border-line bg-surface-2 px-4 py-3 text-[13px] leading-relaxed text-ink-2">
-        <Icon name="Info" className="mt-0.5 size-4 shrink-0 text-brand" />
+      <div className="mt-8 flex max-w-3xl gap-3 rounded-2xl bg-mk-card px-5 py-4 text-[14px] leading-relaxed text-mk-ink">
+        <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-mk-violet" />
         <p>
           Billing isn&apos;t live yet. During early access every account is on the free plan, and several paid features
-          are still in development — see <Link href="/features" className="font-medium text-brand underline-offset-2 hover:underline">Features</Link> for
-          what works today.
+          are still in development. See{" "}
+          <Link href="/features" className="font-medium text-mk-violet underline underline-offset-2">Features</Link> for what works today.
         </p>
       </div>
 
-      <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {PLANS.map((p) => {
           const free = p.tier === "free";
           return (
-            <div key={p.tier} className={cn("flex flex-col rounded-[14px] border bg-surface p-5", free ? "border-brand" : "border-line")}>
-              <div className="flex items-center justify-between">
-                <h2 className="text-[15px] font-semibold text-ink">{p.name}</h2>
-                {free && <Badge tone="brand" size="sm">Available now</Badge>}
+            <div
+              key={p.tier}
+              className={cn(
+                "flex flex-col rounded-2xl p-6",
+                free ? "bg-mk-cta text-white" : "bg-white text-mk-ink ring-1 ring-mk-ink/8",
+              )}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-[15px] font-semibold">{p.name}</h2>
+                {free && <span className="rounded-full bg-white/15 px-2 py-0.5 text-[11.5px] font-medium">Available now</span>}
               </div>
-              <p className="mt-3 text-[26px] font-semibold tracking-tight text-ink">{p.priceLabel}</p>
-              <p className="mt-1 text-[13px] text-muted">{p.tagline}</p>
-              <ul className="mt-5 flex-1 space-y-2">
+              <p className="mt-4 font-display text-[44px] leading-none">{p.priceLabel}</p>
+              <p className="mt-2 text-[14px] opacity-70">{p.tagline}</p>
+              <ul className="mt-6 flex-1 space-y-2.5">
                 {p.features.map((f) => (
-                  <li key={f} className="flex gap-2 text-[13px] text-ink-2">
-                    <Icon name="Check" className="mt-0.5 size-3.5 shrink-0 text-faint" />
+                  <li key={f} className="flex gap-2 text-[14px]">
+                    <Check aria-hidden className={cn("mt-0.5 size-4 shrink-0", free ? "text-mk-lavender" : "opacity-40")} />
                     {f}
                   </li>
                 ))}
               </ul>
-              <div className="mt-6">
+              <div className="mt-8">
                 {free ? (
-                  <Button asChild variant="primary" className="w-full"><Link href="/signup">Start free</Link></Button>
+                  <PillLink href={BRAND.cta.href} variant="violet" className="w-full justify-center bg-white text-mk-cta hover:bg-mk-lavender">
+                    Start free
+                  </PillLink>
                 ) : (
-                  <Button variant="secondary" className="w-full" disabled>Coming soon</Button>
+                  <span aria-disabled className="flex h-11 w-full items-center justify-center rounded-full text-[14.5px] font-medium opacity-50 ring-1 ring-mk-ink/20">
+                    Coming soon
+                  </span>
                 )}
               </div>
             </div>

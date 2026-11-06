@@ -8,6 +8,29 @@ queue are now driven by real scanner output._
 
 **Gates (2026-10-31, after Stage 1):** `npm run typecheck` ✓ · `npm run lint` ✓ 0 errors / 0 warnings · `npm test` ✓ 68 tests (8 files) · `npm run build` ✓. All four must stay green.
 
+## Public homepage redesign (2026-11-06)
+
+**Built**
+- New `/` from the founder's spec. Purple palette, Instrument Serif + Inter, scoped to `app/(marketing)` (`--mk-*` tokens); the product app keeps its blue system.
+- New header with dropdowns and a Resources mega-menu (Radix NavigationMenu) plus a mobile menu. New footer. Both apply to every marketing page.
+- Hero: pre-baked wavy dot texture (`scripts/gen-hero-dots.mjs`; a live SVG-filter version sits behind `BRAND.heroTexture`), an email box that opens `/signup` with the address prefilled (validated server-side), and an autoplaying product illustration labelled "Illustration". It runs only while half in view and stays still under reduced motion.
+- Sticky tool-name strip, scroll-driven page colour (`background-observer.tsx`), skeleton→content cards, a typed-out answer mock, a snap carousel of checks with real statuses, persona cards, resources, final CTA.
+- All copy, nav and section themes live in `lib/brand.ts`.
+- **Deliberate deviations from the spec (honesty rules):** CTA is "Get started" → sign-up (no demo programme exists). No "trusted by 16,000" count: the strip lists tools we support. Compliance-framework cards replaced by what VibeShield actually checks. No compliance seals. "Partners" omitted. Unbuilt resources are shown as "Soon", not linked. Social icons render only once URLs are set.
+
+**Verified**
+- Real headless Chrome driven over CDP at 1440×900 and 390×844, scrolling through the page: every section, the colour sequence, the sticky strip, all 8 demo steps incl. cursor press, the mega-menu rail swap, the mobile layout. No horizontal overflow at either width. Found and fixed: invalid `calc()` in the carousel gutter, and a colour-observer miss on fast scroll jumps (now measures which section is under the midline).
+- Gates: typecheck ✓ · lint ✓ · 147 tests ✓ · build ✓. `/`, `/features`, `/pricing`, `/terms`, `/privacy` 200.
+
+**Iteration 2 (same day, founder asked for a finished look with stand-in assets)**
+- Stand-in artwork: 8 unDraw illustrations recoloured to the palette (Built for, Resources, final CTA) and 10 Simple Icons (CC0) tool logos in the strip. Sources and licences in `public/marketing/ASSETS.md`; swap by file name or in `lib/brand.ts`.
+- New "From prompt to production" section: the six-step loop from `lib/marketing.ts`, each with its real status.
+- `/features`, `/pricing`, `/terms`, `/privacy` restyled to the marketing design (serif titles, pill buttons, shared `StatusTag`/`PageIntro`); wording unchanged.
+- **App-wide CSS fix:** the global `* { border-color }` and heading `letter-spacing` rules in `globals.css` were unlayered, so they silently overrode every `border-*` colour and `tracking-*` utility (e.g. the "current plan" outline never showed). Moved into `@layer base`. App pages checked in the demo session (overview, fix, settings): colours now show as authored.
+
+**Not verified**
+- Lighthouse score; real-device touch scrolling; Safari.
+
 ## Stage 2 — Multi-tenant database (IN PROGRESS)
 
 ### Slice 1 — identity, workspaces, roles (written + tested locally, 2026-11-01 · NOT applied to Supabase yet)
