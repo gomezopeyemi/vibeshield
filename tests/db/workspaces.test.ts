@@ -27,7 +27,7 @@ describe("schema", () => {
     const { rows } = await db.query<{ relname: string; relrowsecurity: boolean }>(
       "select relname, relrowsecurity from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r'",
     );
-    expect(rows.length).toBe(3);
+    expect(rows.map((r) => r.relname)).toEqual(expect.arrayContaining(["profiles", "workspaces", "workspace_members"]));
     for (const r of rows) expect(r.relrowsecurity, r.relname).toBe(true);
 
     const policies = await db.query<{ policyname: string; qual: string | null; with_check: string | null }>(

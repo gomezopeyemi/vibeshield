@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { SeverityBadge } from "@/components/ui/severity-badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import { requireUser } from "@/lib/auth/session";
+import { getScanScope } from "@/lib/scan-scope";
 
 export const metadata: Metadata = { title: "Compare scans" };
 export const dynamic = "force-dynamic";
@@ -51,8 +51,8 @@ export default async function ComparePage({
   searchParams: Promise<{ from?: string; to?: string }>;
 }) {
   const { from, to } = await searchParams;
-  const user = await requireUser();
-  const runs = (await listRuns(user.id)).filter((r) => r.status === "completed");
+  const scope = await getScanScope();
+  const runs = (await listRuns(scope)).filter((r) => r.status === "completed");
 
   if (runs.length < 2 && !(from && to)) {
     return (
@@ -70,8 +70,7 @@ export default async function ComparePage({
     );
   }
 
-  const toRun = to ? await getRun(to, user.id) : runs[0];
-  const fromRun = from ? await getRun(from, user.id) : runs[1];
+  const [toRun, fromRun] = await Promise.all([getRun(to ?? runs[0].scanId, scope), getRun(from ?? runs[1].scanId, scope)]);
   if (!toRun || !fromRun) notFound();
   const d = diffScans(fromRun, toRun);
 

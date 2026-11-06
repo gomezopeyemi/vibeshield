@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ScanEvent } from "@/lib/types";
+import { useSession } from "@/components/providers";
+import { Icon } from "@/components/ui/icon";
 import { ConnectPanel } from "./connect-panel";
 import {
   LiveScanTheater,
@@ -12,6 +14,8 @@ import {
 
 export function OnboardingWorkspace() {
   const router = useRouter();
+  const { workspace } = useSession();
+  const canScan = workspace.role !== "viewer";
   const [events, setEvents] = useState<ScanEvent[]>([]);
   const [status, setStatus] = useState<TheaterStatus>("idle");
   const [summary, setSummary] = useState<ScanSummary | null>(null);
@@ -104,16 +108,25 @@ export function OnboardingWorkspace() {
   }, [router]);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <ConnectPanel onStart={start} scanning={status === "running"} />
-      <LiveScanTheater
-        events={events}
-        status={status}
-        elapsed={status === "completed" && summary ? summary.durationMs / 1000 : elapsed}
-        summary={summary}
-        starting={starting}
-        onStart={start}
-      />
+    <div className="space-y-4">
+      {!canScan && (
+        <p className="flex items-start gap-2.5 rounded-[10px] border border-line bg-surface-2/60 px-3.5 py-2.5 text-[12.5px] text-ink-2" role="status">
+          <Icon name="Lock" className="mt-0.5 size-4 shrink-0 text-muted" />
+          You&apos;re a viewer in {workspace.name}. Owners, admins and developers can run scans; you can see every result.
+        </p>
+      )}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ConnectPanel onStart={start} scanning={status === "running"} canScan={canScan} />
+        <LiveScanTheater
+          events={events}
+          status={status}
+          elapsed={status === "completed" && summary ? summary.durationMs / 1000 : elapsed}
+          summary={summary}
+          starting={starting}
+          onStart={start}
+          canScan={canScan}
+        />
+      </div>
     </div>
   );
 }

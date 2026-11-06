@@ -44,6 +44,7 @@ export function LiveScanTheater({
   summary,
   starting,
   onStart,
+  canScan = true,
 }: {
   events: ScanEvent[];
   status: TheaterStatus;
@@ -51,6 +52,8 @@ export function LiveScanTheater({
   summary: ScanSummary | null;
   starting: boolean;
   onStart: () => void;
+  /** False for viewers; the server refuses them too. */
+  canScan?: boolean;
 }) {
   const logRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -124,7 +127,7 @@ export function LiveScanTheater({
                 Runs VibeShield&apos;s static rules over the current files and streams findings as they&apos;re discovered. Git history, live database and URL checks are not part of this scan yet.
               </p>
             </div>
-            <Button variant="primary" size="sm" disabled={starting} onClick={onStart}>
+            <Button variant="primary" size="sm" disabled={starting || !canScan} onClick={onStart}>
               {starting ? <><Icon name="Loader2" className="animate-spin" /> Starting…</> : <><Icon name="Play" /> Run scan</>}
             </Button>
           </div>

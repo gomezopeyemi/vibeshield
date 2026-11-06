@@ -12,7 +12,7 @@ import { Icon } from "@/components/ui/icon";
 import { Badge } from "@/components/ui/badge";
 import { LineChart } from "@/components/ui/line-chart";
 import type { ScanStatus } from "@/lib/types";
-import { requireUser } from "@/lib/auth/session";
+import { getScanScope } from "@/lib/scan-scope";
 
 export const metadata: Metadata = { title: "Repository Scans" };
 export const dynamic = "force-dynamic";
@@ -28,14 +28,16 @@ export default async function ScansPage({ searchParams }: { searchParams: Promis
   const filter = FILTERS.find((f) => f.key === status) ?? FILTERS[0];
   const env = await getScans();
   const scans = env.data.filter((s) => filter.match(s.status));
-  const runs = env.origin === "live" ? await listRuns((await requireUser()).id) : [];
+  const scope = await getScanScope();
+  const runs = env.origin === "live" ? await listRuns(scope) : [];
   const scoreById = new Map(runs.map((r) => [r.scanId, r.score]));
   const trend = runs
     .filter((r) => r.status === "completed")
     .slice()
     .reverse()
     .map((r) => ({ at: r.finishedAt, score: r.score }));
-  const st = storeStatus();
+  const st = storeStatus(scope);
+  const durable = st.persisted && runs.every((r) => r.persisted);
   const completed = env.data.filter((s) => s.status === "completed").length;
 
   return (
@@ -61,8 +63,8 @@ export default async function ScansPage({ searchParams }: { searchParams: Promis
       <DataBanner origin={env.origin} note={env.note} />
       {env.origin === "live" && (
         <p className="flex items-center gap-1.5 text-[12px] text-muted">
-          <Icon name={st.persisted ? "Database" : "AlertTriangle"} className={st.persisted ? "size-3.5 text-success" : "size-3.5 text-warning-ink"} />
-          {st.persisted ? "History is saved to Supabase and survives restarts." : "History is in server memory only — not durable."}
+          <Icon name={durable ? "Database" : "AlertTriangle"} className={durable ? "size-3.5 text-success" : "size-3.5 text-warning-ink"} />
+          {durable ? "History is saved to this workspace and survives restarts." : "Some history is in server memory only — not durable."}
         </p>
       )}
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getRun, listRuns, storeStatus } from "@/lib/scan-store";
+import { getRun, listRuns } from "@/lib/scan-store";
 import { cn, formatDuration, formatTime, timeAgo } from "@/lib/utils";
 import { PILLARS, PILLAR_ORDER } from "@/lib/constants";
 import { PageHeader } from "@/components/ui/page-header";
@@ -12,21 +12,20 @@ import { Icon } from "@/components/ui/icon";
 import { ScanPill } from "@/components/ui/status-pill";
 import { SeverityBadge } from "@/components/ui/severity-badge";
 import { ScoreRing } from "@/components/ui/score-ring";
-import { requireUser } from "@/lib/auth/session";
+import { getScanScope } from "@/lib/scan-scope";
 
 export const metadata: Metadata = { title: "Scan detail" };
 export const dynamic = "force-dynamic";
 
 export default async function ScanDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await requireUser();
-  const run = await getRun(id, user.id);
+  const scope = await getScanScope();
+  const run = await getRun(id, scope);
   if (!run) notFound();
 
-  const runs = await listRuns(user.id);
+  const runs = await listRuns(scope);
   const idx = runs.findIndex((r) => r.scanId === id);
   const previous = runs.slice(idx + 1).find((r) => r.status === "completed");
-  const st = storeStatus();
 
   return (
     <div className="space-y-6">
@@ -50,7 +49,7 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
         }
       />
 
-      {!st.persisted && (
+      {!run.persisted && (
         <div className="flex items-start gap-2.5 rounded-[10px] border border-warning-soft bg-warning-soft/60 px-3.5 py-2.5 text-[12.5px] text-warning-ink" role="status">
           <Icon name="AlertTriangle" className="mt-0.5 size-4 shrink-0" />
           <p><span className="font-semibold">Not saved.</span> This scan is held in server memory only and will be lost when the server restarts.</p>

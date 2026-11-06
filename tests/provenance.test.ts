@@ -9,12 +9,18 @@ const BOB: SessionUser = { id: "user_bob", email: "bob@example.test", name: "Bob
 
 let current: SessionUser = ALICE;
 
+const scopeOf = (u: SessionUser) => ({ userId: u.id, key: `not_provisioned:${u.id}`, durable: false, canScan: true });
+
 async function load(env: Record<string, string | undefined>) {
   vi.resetModules();
   (globalThis as G).__vibeshield_runs = [];
   for (const k of ["VIBESHIELD_ENV", "VIBESHIELD_LIVE", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]) vi.stubEnv(k, "");
   for (const [k, v] of Object.entries(env)) vi.stubEnv(k, v ?? "");
   vi.doMock("@/lib/auth/session", () => ({ requireUser: async () => current }));
+  // Workspace tables not set up: scans stay in memory, per user (tests/scan-store covers durable mode).
+  vi.doMock("@/lib/workspaces/data", () => ({
+    getWorkspaceContext: async () => ({ state: current.demo ? "demo" : "not_provisioned", workspaces: [], current: {} }),
+  }));
   const config = await import("@/lib/config");
   const data = await import("@/lib/data");
   const store = await import("@/lib/scan-store");
@@ -30,6 +36,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.doUnmock("@/lib/auth/session");
+  vi.doUnmock("@/lib/workspaces/data");
   delete (globalThis as G).__vibeshield_runs;
 });
 
@@ -86,7 +93,7 @@ describe("data layer provenance", () => {
   it("does not mix demo PRs or a demo badge with a real scan", async () => {
     const { data, store, scanner, source } = await load({ VIBESHIELD_ENV: "development" });
     const result = await scanner.runScan(source.sampleSource(), () => {}, { pace: false });
-    await store.saveScan(result, ALICE.id);
+    await store.saveScan(result, scopeOf(ALICE));
 
     const readiness = await data.getReadiness();
     expect(readiness.origin).toBe("live");
@@ -106,11 +113,11 @@ describe("scan ownership", () => {
   it("keeps one account's scans invisible to another", async () => {
     const { data, store, scanner, source } = await load({ VIBESHIELD_ENV: "development" });
     const result = await scanner.runScan(source.sampleSource(), () => {}, { pace: false });
-    await store.saveScan(result, ALICE.id);
+    await store.saveScan(result, scopeOf(ALICE));
 
-    expect(await store.listRuns(BOB.id)).toHaveLength(0);
-    expect(await store.getRun(result.scanId, BOB.id)).toBeNull();
-    expect((await store.getRun(result.scanId, ALICE.id))?.scanId).toBe(result.scanId);
+    expect(await store.listRuns(scopeOf(BOB))).toHaveLength(0);
+    expect(await store.getRun(result.scanId, scopeOf(BOB))).toBeNull();
+    expect((await store.getRun(result.scanId, scopeOf(ALICE)))?.scanId).toBe(result.scanId);
 
     current = BOB;
     expect((await data.getReadiness()).origin).toBe("unavailable");

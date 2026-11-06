@@ -1,170 +1,326 @@
 import "server-only";
-import type { ScanResult } from "./scanner";
+import { z } from "zod";
+import { SCORE_FORMULA_VERSION, type ScanResult } from "./scanner";
+import { ADMIN_STATUS, adminClient } from "./supabase/admin";
+import { createClient } from "./supabase/server";
+import { isMissingSchema } from "./workspaces/data";
+import type { ScanScope } from "./scan-scope";
 import type { Scan, Finding, ReadinessState, PillarSummary, Pillar } from "./types";
 
 /* Scan persistence.
  *
- * Durable backend: a Supabase table (public.vs_scans) written through PostgREST
- * with a SERVER-ONLY service-role key (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY).
- * RLS is enabled on the table with no policies, so browsers cannot touch it.
+ * Durable: the workspace-owned tables in supabase/migrations/*_scans.sql.
+ * Reads run as the signed-in user, so RLS (members only) decides what comes
+ * back. Writes go through public.record_scan() with the server's secret key:
+ * members must not be able to write scan results themselves.
  *
- * If those env vars are absent — or a write fails — scans fall back to this
- * process's memory and the app reports `persisted: false`. History is then
- * per-server-instance and is NOT durable. We never claim otherwise. */
+ * Not durable (the scope isn't a real workspace, the secret key is missing, or
+ * the write failed): the scan is held in this process's memory under the
+ * scope's key, flagged `persisted: false`, and the UI says so. A failed READ
+ * throws ScanHistoryUnavailable, because unreadable history must never look
+ * like an empty (clean) one. */
 
-const MEM_LIMIT = 25;
-const g = globalThis as unknown as { __vibeshield_runs?: ScanResult[] };
-const memory: ScanResult[] = g.__vibeshield_runs ?? (g.__vibeshield_runs = []);
+export type StoredScan = ScanResult & { persisted: boolean };
+export type ScanSummary = Omit<StoredScan, "findings" | "events"> & { findingCount: number };
 
-const URL_ = process.env.SUPABASE_URL?.replace(/\/$/, "");
-const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-export const PERSISTENCE_CONFIGURED = Boolean(URL_ && KEY);
+export class ScanHistoryUnavailable extends Error {}
 
-export type StoreMode = "supabase" | "memory";
-export interface StoreStatus {
-  mode: StoreMode;
-  persisted: boolean;
-  /** Set when Supabase is configured but the last call failed. */
-  error?: string;
-}
-let lastError: string | undefined;
+// ---- memory fallback -----------------------------------------------------------
 
-export function storeStatus(): StoreStatus {
-  if (PERSISTENCE_CONFIGURED && !lastError) return { mode: "supabase", persisted: true };
-  return { mode: "memory", persisted: false, error: PERSISTENCE_CONFIGURED ? lastError : undefined };
-}
+const PER_SCOPE = 25;
+const TOTAL = 500;
+type Held = { key: string; run: ScanResult };
+const g = globalThis as unknown as { __vibeshield_runs?: Held[] };
+const memory: Held[] = g.__vibeshield_runs ?? (g.__vibeshield_runs = []);
 
-interface Row {
-  id: string;
-  owner_id: string;
-  source: ScanResult["source"];
-  status: ScanResult["status"];
-  started_at: string;
-  finished_at: string;
-  duration_ms: number;
-  scanners: string[];
-  file_count: number;
-  score: number;
-  pillars: ScanResult["pillars"];
-  findings: ScanResult["findings"];
-  events: ScanResult["events"];
-  error: string | null;
-}
-
-const toRow = (r: ScanResult & { ownerId: string }): Row => ({
-  id: r.scanId,
-  owner_id: r.ownerId,
-  source: r.source,
-  status: r.status,
-  started_at: r.startedAt,
-  finished_at: r.finishedAt,
-  duration_ms: r.durationMs,
-  scanners: r.scanners,
-  file_count: r.fileCount,
-  score: r.score,
-  pillars: r.pillars,
-  findings: r.findings,
-  events: r.events,
-  error: r.error ?? null,
-});
-
-const fromRow = (w: Row): ScanResult => ({
-  scanId: w.id,
-  ownerId: w.owner_id,
-  source: w.source,
-  status: w.status,
-  startedAt: w.started_at,
-  finishedAt: w.finished_at,
-  durationMs: w.duration_ms,
-  scanners: w.scanners as ScanResult["scanners"],
-  fileCount: w.file_count,
-  score: w.score,
-  pillars: w.pillars,
-  findings: w.findings,
-  events: w.events,
-  error: w.error ?? undefined,
-});
-
-async function rest<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${URL_}/rest/v1/${path}`, {
-    ...init,
-    cache: "no-store",
-    headers: {
-      apikey: KEY!,
-      authorization: `Bearer ${KEY}`,
-      "content-type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
-  if (!res.ok) throw new Error(`Supabase ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const text = await res.text();
-  return (text ? JSON.parse(text) : null) as T;
-}
-
-function remember(result: ScanResult) {
-  memory.unshift(result);
-  if (memory.length > MEM_LIMIT) memory.length = MEM_LIMIT;
-}
-
-/** Persist a finished scan for its owner. Returns where it actually landed. */
-export async function saveScan(scan: ScanResult, ownerId: string): Promise<StoreStatus> {
-  const result = { ...scan, ownerId };
-  if (PERSISTENCE_CONFIGURED) {
-    try {
-      await rest("vs_scans", {
-        method: "POST",
-        headers: { prefer: "resolution=merge-duplicates,return=minimal" },
-        body: JSON.stringify(toRow(result)),
-      });
-      lastError = undefined;
-      return storeStatus();
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : "Supabase write failed";
-    }
+function hold(key: string, run: ScanResult) {
+  memory.unshift({ key, run });
+  let kept = 0;
+  for (let i = 0; i < memory.length; i++) {
+    if (memory[i].key === key && ++kept > PER_SCOPE) memory.splice(i--, 1);
   }
-  remember(result); // honest fallback — flagged non-durable by storeStatus()
-  return storeStatus();
+  if (memory.length > TOTAL) memory.length = TOTAL;
 }
 
-/** The owner's scans, newest first (durable rows merged with anything held in memory). */
-export async function listRuns(ownerId: string, limit = 50): Promise<ScanResult[]> {
-  let durable: ScanResult[] = [];
-  if (PERSISTENCE_CONFIGURED) {
-    try {
-      const rows = await rest<Row[]>(
-        `vs_scans?owner_id=eq.${encodeURIComponent(ownerId)}&select=*&order=finished_at.desc&limit=${limit}`,
-      );
-      durable = rows.map(fromRow).filter((r) => r.ownerId === ownerId);
-      lastError = undefined;
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : "Supabase read failed";
+const held = (scope: ScanScope) => memory.filter((h) => h.key === scope.key).map((h) => h.run);
+
+// ---- status --------------------------------------------------------------------
+
+export interface StoreStatus {
+  mode: "supabase" | "memory";
+  persisted: boolean;
+  /** Why scans aren't being saved, for the storage notice. */
+  reason?: string;
+}
+
+const ADMIN_REASON = {
+  missing: "Scan history isn't being saved: set SUPABASE_SECRET_KEY (server-only) so the server can record scans.",
+  not_privileged: "Scan history isn't being saved: SUPABASE_SECRET_KEY holds a publishable key, not the project's secret key.",
+} as const;
+
+const NOT_PROVISIONED = "The scan history tables aren't set up on this Supabase project yet. Apply supabase/migrations/20261106000100_scans.sql.";
+
+const writeFailures = new Map<string, string>();
+
+/** Where the next scan in this scope will be saved. */
+export function storeStatus(scope: ScanScope): StoreStatus {
+  const memoryMode = (reason?: string): StoreStatus => ({ mode: "memory", persisted: false, reason });
+  if (!scope.durable) return memoryMode(scope.reason);
+  if (ADMIN_STATUS !== "configured") return memoryMode(ADMIN_REASON[ADMIN_STATUS]);
+  const failure = writeFailures.get(scope.key);
+  if (failure === NOT_PROVISIONED) return memoryMode(`${NOT_PROVISIONED} Until then scans are held in server memory only.`);
+  if (failure) return memoryMode(`The last scan couldn't be saved to the database (${failure}), so it is held in server memory only.`);
+  return { mode: "supabase", persisted: true };
+}
+
+// ---- write ---------------------------------------------------------------------
+
+function toPayload(r: ScanResult, scope: ScanScope) {
+  return {
+    id: r.scanId,
+    workspace_id: scope.key,
+    created_by: scope.userId,
+    source: { kind: r.source.kind, id: r.source.id, label: r.source.label, branch: r.source.branch, commit: r.source.commit ?? null },
+    status: r.status,
+    started_at: r.startedAt,
+    finished_at: r.finishedAt,
+    duration_ms: r.durationMs,
+    scanners: r.scanners,
+    file_count: r.fileCount,
+    error: r.error?.slice(0, 2000) ?? null,
+    // Only a completed scan has a score; anything else must not record one.
+    score: r.status === "completed" ? r.score : null,
+    pillars: r.pillars,
+    formula_version: SCORE_FORMULA_VERSION,
+    findings: r.findings.map((f) => ({
+      id: f.id,
+      pillar: f.pillar,
+      severity: f.severity,
+      status: f.status,
+      scanner: f.scanner,
+      title: f.title.slice(0, 300),
+      human_summary: f.humanSummary,
+      business_impact: f.businessImpact,
+      evidence: f.evidence,
+      recommendation: f.recommendation,
+      context: f.context ?? null,
+      resource: f.resource ?? null,
+      score_delta: f.scoreDelta ?? null,
+      detected_at: f.detectedAt,
+    })),
+    events: r.events.map((e) => ({
+      at: e.at,
+      scanner: e.scanner,
+      level: e.level,
+      message: e.message.slice(0, 2000),
+      path: e.path ?? null,
+      line: e.line ?? null,
+    })),
+  };
+}
+
+/** Save a finished scan in the caller's scope. Returns where it actually landed. */
+export async function saveScan(scan: ScanResult, scope: ScanScope): Promise<StoreStatus> {
+  if (!scope.canScan) throw new Error("saveScan called without permission to scan in this workspace");
+  const admin = scope.durable ? adminClient() : null;
+  if (admin) {
+    const { error } = await admin.rpc("record_scan", { scan: toPayload(scan, scope) });
+    if (!error) {
+      writeFailures.delete(scope.key);
+      return storeStatus(scope);
     }
+    console.error("[scan-store] record_scan failed", error.code, error.message);
+    writeFailures.set(scope.key, isMissingSchema(error) ? NOT_PROVISIONED : `error ${error.code || "unknown"}`);
+  }
+  hold(scope.key, scan); // honest fallback, flagged non-durable by storeStatus()
+  return storeStatus(scope);
+}
+
+// ---- read ----------------------------------------------------------------------
+
+const PILLAR = z.enum(["security", "finops", "revenue", "code-health"]);
+const SCANNER = z.enum(["static-rules", "gitleaks", "semgrep", "tree-sitter", "supabase", "live-url", "nuclei"]);
+const pillarScores = z.object({ security: z.number(), finops: z.number(), revenue: z.number(), "code-health": z.number() });
+const snapshot = z.object({ score: z.number(), pillars: pillarScores });
+
+const SCAN_COLUMNS =
+  "id, source_kind, source_id, source_label, branch, commit_sha, status, started_at, finished_at, duration_ms, scanners, file_count, finding_count, error, score_snapshots(score, pillars)";
+const FINDING_COLUMNS =
+  "ord, id, pillar, severity, status, scanner, title, human_summary, business_impact, evidence, recommendation, context, resource, score_delta, detected_at";
+const EVENT_COLUMNS = "seq, at, scanner, level, message, path, line";
+
+const scanRow = z.object({
+  id: z.string(),
+  source_kind: z.enum(["sample", "local", "github"]),
+  source_id: z.string(),
+  source_label: z.string(),
+  branch: z.string(),
+  commit_sha: z.string().nullable(),
+  status: z.enum(["queued", "running", "completed", "partial", "failed", "cancelled"]),
+  started_at: z.string(),
+  finished_at: z.string().nullable(),
+  duration_ms: z.number().nullable(),
+  scanners: z.array(SCANNER),
+  file_count: z.number(),
+  finding_count: z.number(),
+  error: z.string().nullable(),
+  // One-to-one embed: PostgREST returns an object (or null); accept a list too.
+  score_snapshots: z.union([snapshot, z.array(snapshot)]).nullable(),
+});
+
+const findingRow = z.object({
+  id: z.string(),
+  pillar: PILLAR,
+  severity: z.enum(["critical", "high", "medium", "low", "info"]),
+  status: z.enum(["open", "fix-proposed", "pr-open", "pr-merged", "resolved", "verifying", "regressed", "dismissed"]),
+  scanner: SCANNER,
+  title: z.string(),
+  human_summary: z.string(),
+  business_impact: z.string(),
+  evidence: z.string(),
+  recommendation: z.string(),
+  context: z
+    .object({ path: z.string(), language: z.string(), startLine: z.number(), snippet: z.string(), proposed: z.string().optional() })
+    .nullable(),
+  resource: z.string().nullable(),
+  score_delta: z.number().nullable(),
+  detected_at: z.string(),
+});
+
+const eventRow = z.object({
+  seq: z.number(),
+  at: z.string(),
+  scanner: SCANNER,
+  level: z.enum(["info", "check", "warn", "fail", "phase"]),
+  message: z.string(),
+  path: z.string().nullable(),
+  line: z.number().nullable(),
+});
+
+const detailRow = scanRow.extend({ findings: z.array(findingRow), scan_events: z.array(eventRow) });
+
+/** Postgres and JS format timestamps differently; normalise so they sort as strings. */
+const iso = (s: string) => new Date(s).toISOString();
+
+const UNSCORED: Record<Pillar, number> = { security: 0, finops: 0, revenue: 0, "code-health": 0 };
+
+function summaryFromRow(row: z.infer<typeof scanRow>): ScanSummary {
+  const snap = Array.isArray(row.score_snapshots) ? row.score_snapshots[0] : row.score_snapshots;
+  return {
+    scanId: row.id,
+    source: { kind: row.source_kind, id: row.source_id, label: row.source_label, branch: row.branch, commit: row.commit_sha ?? undefined },
+    status: row.status,
+    startedAt: iso(row.started_at),
+    finishedAt: iso(row.finished_at ?? row.started_at),
+    durationMs: row.duration_ms ?? 0,
+    scanners: row.scanners,
+    fileCount: row.file_count,
+    findingCount: row.finding_count,
+    score: snap?.score ?? 0,
+    pillars: snap?.pillars ?? UNSCORED,
+    error: row.error ?? undefined,
+    persisted: true,
+  };
+}
+
+function summarize(run: ScanResult, persisted: boolean): ScanSummary {
+  const { findings, events: _events, ...rest } = run;
+  return { ...rest, findingCount: findings.length, persisted };
+}
+
+function unavailable(error: { code?: string; message?: string }): never {
+  if (isMissingSchema(error)) throw new ScanHistoryUnavailable(NOT_PROVISIONED);
+  console.error("[scan-store] read failed", error.code, error.message);
+  throw new ScanHistoryUnavailable("Scan history couldn't be loaded from the database. Refresh to try again.");
+}
+
+/** This scope's scans, newest first, without findings or events. */
+export async function listRuns(scope: ScanScope, limit = 50): Promise<ScanSummary[]> {
+  let durable: ScanSummary[] = [];
+  if (scope.durable) {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("scans")
+      .select(SCAN_COLUMNS)
+      .eq("workspace_id", scope.key)
+      .order("finished_at", { ascending: false })
+      .limit(limit);
+    if (error) unavailable(error);
+    const parsed = z.array(scanRow).safeParse(data ?? []);
+    if (!parsed.success) unavailable({ message: parsed.error.message });
+    durable = parsed.data.map(summaryFromRow);
   }
   const seen = new Set(durable.map((r) => r.scanId));
-  return [...durable, ...memory.filter((r) => r.ownerId === ownerId && !seen.has(r.scanId))]
-    .sort((a, b) => b.finishedAt.localeCompare(a.finishedAt))
-    .slice(0, limit);
+  const inMemory = held(scope)
+    .filter((r) => !seen.has(r.scanId))
+    .map((r) => summarize(r, false));
+  return [...durable, ...inMemory].sort((a, b) => b.finishedAt.localeCompare(a.finishedAt)).slice(0, limit);
 }
 
-/** A scan by id, only if it belongs to `ownerId` (otherwise null, same as not found). */
-export async function getRun(id: string, ownerId: string): Promise<ScanResult | null> {
-  if (PERSISTENCE_CONFIGURED) {
-    try {
-      const rows = await rest<Row[]>(
-        `vs_scans?id=eq.${encodeURIComponent(id)}&owner_id=eq.${encodeURIComponent(ownerId)}&select=*&limit=1`,
-      );
-      const row = rows[0] ? fromRow(rows[0]) : null;
-      if (row?.ownerId === ownerId) return row;
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : "Supabase read failed";
+/** One scan with its findings and events, only if it is in this scope (otherwise null, same as not found). */
+export async function getRun(id: string, scope: ScanScope): Promise<StoredScan | null> {
+  if (scope.durable) {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("scans")
+      .select(`${SCAN_COLUMNS}, findings(${FINDING_COLUMNS}), scan_events(${EVENT_COLUMNS})`)
+      .eq("workspace_id", scope.key)
+      .eq("id", id)
+      .order("ord", { referencedTable: "findings" })
+      .order("seq", { referencedTable: "scan_events" })
+      .maybeSingle();
+    if (error) unavailable(error);
+    if (data) {
+      const parsed = detailRow.safeParse(data);
+      if (!parsed.success) unavailable({ message: parsed.error.message });
+      const row = parsed.data;
+      const { findingCount: _count, ...summary } = summaryFromRow(row);
+      return {
+        ...summary,
+        findings: row.findings.map(
+          (f): Finding => ({
+            id: f.id,
+            pillar: f.pillar,
+            severity: f.severity,
+            status: f.status,
+            scanner: f.scanner,
+            title: f.title,
+            humanSummary: f.human_summary,
+            businessImpact: f.business_impact,
+            evidence: f.evidence,
+            recommendation: f.recommendation,
+            context: f.context ?? undefined,
+            resource: f.resource ?? undefined,
+            scoreDelta: f.score_delta ?? undefined,
+            detectedAt: iso(f.detected_at),
+          }),
+        ),
+        events: row.scan_events.map((e) => ({
+          id: `${row.id}_${e.seq}`,
+          scanId: row.id,
+          at: iso(e.at),
+          scanner: e.scanner,
+          level: e.level,
+          message: e.message,
+          path: e.path ?? undefined,
+          line: e.line ?? undefined,
+        })),
+      };
     }
   }
-  return memory.find((r) => r.scanId === id && r.ownerId === ownerId) ?? null;
+  const run = held(scope).find((r) => r.scanId === id);
+  return run ? { ...run, persisted: false } : null;
+}
+
+/** The newest completed scan in full, or null if there is none. */
+export async function latestCompletedRun(scope: ScanScope, runs?: ScanSummary[]): Promise<StoredScan | null> {
+  const latest = (runs ?? (await listRuns(scope))).find((r) => r.status === "completed");
+  return latest ? getRun(latest.scanId, scope) : null;
 }
 
 // ---- converters to UI view-models -------------------------------------------
 
-export function resultToScan(r: ScanResult): Scan {
+export function resultToScan(r: ScanSummary): Scan {
   return {
     id: r.scanId,
     repositoryId: r.source.id,
@@ -175,7 +331,7 @@ export function resultToScan(r: ScanResult): Scan {
     scanners: r.scanners,
     branch: r.source.branch,
     commitSha: r.source.commit,
-    findingCount: r.findings.length,
+    findingCount: r.findingCount,
     origin: "live",
   };
 }
@@ -187,13 +343,14 @@ function statusFor(score: number, open: number): PillarSummary["status"] {
   return "healthy";
 }
 
-export function readinessFromRuns(runs: ScanResult[]): ReadinessState | null {
-  const completed = runs.filter((r) => r.status === "completed");
-  const latest = completed[0];
+export function readinessFromRuns(runs: ScanSummary[], latest: ScanResult | null): ReadinessState | null {
   if (!latest) return null;
-  const chrono = completed.slice().reverse();
-  const history = chrono.map((r) => ({ at: r.finishedAt, score: r.score }));
-  const prev = completed[1]?.score;
+  const completed = runs.filter((r) => r.status === "completed");
+  const history = completed
+    .slice()
+    .reverse()
+    .map((r) => ({ at: r.finishedAt, score: r.score }));
+  const prev = completed[completed.findIndex((r) => r.scanId === latest.scanId) + 1]?.score;
 
   const order: Pillar[] = ["security", "finops", "revenue", "code-health"];
   const pillars: PillarSummary[] = order.map((p) => {
@@ -211,9 +368,6 @@ export function readinessFromRuns(runs: ScanResult[]): ReadinessState | null {
     pillars,
   };
 }
-
-export const findingsFromRuns = (runs: ScanResult[]): Finding[] =>
-  runs.find((r) => r.status === "completed")?.findings ?? [];
 
 // ---- scan comparison ----------------------------------------------------------
 

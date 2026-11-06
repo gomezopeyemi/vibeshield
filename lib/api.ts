@@ -33,6 +33,18 @@ export function ok<T>(data: T): Response {
   return Response.json({ ok: true, data } satisfies ActionSuccess<T>);
 }
 
+/** The caller's workspace role doesn't allow running scans. */
+export function cannotScan(): Response {
+  return fail(
+    {
+      code: "forbidden",
+      message: "Viewers can't run scans in this workspace.",
+      remediation: "Ask a workspace owner or admin for the developer role.",
+    },
+    403,
+  );
+}
+
 /** The integration is configured but the backend call is not built yet. Never `ok`. */
 export function notImplemented(message: string): Response {
   return fail(

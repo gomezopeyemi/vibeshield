@@ -55,7 +55,7 @@ export async function createUser(db: PGlite, email: string, fullName = ""): Prom
   return rows[0].id;
 }
 
-export type Actor = { role: "anon" } | { role: "authenticated"; userId: string };
+export type Actor = { role: "anon" } | { role: "service_role" } | { role: "authenticated"; userId: string };
 
 /** Runs one statement as an API caller, exactly as PostgREST would: SET ROLE + JWT claims. */
 export async function asUser<T = Record<string, unknown>>(
@@ -64,7 +64,7 @@ export async function asUser<T = Record<string, unknown>>(
   sql: string,
   params: unknown[] = [],
 ): Promise<{ rows: T[]; affectedRows: number }> {
-  const claims = actor.role === "anon" ? { role: "anon" } : { role: "authenticated", sub: actor.userId };
+  const claims = actor.role === "authenticated" ? { role: "authenticated", sub: actor.userId } : { role: actor.role };
   await db.query("select set_config('request.jwt.claims', $1, false)", [JSON.stringify(claims)]);
   await db.exec(`set role ${actor.role}`);
   try {
@@ -78,3 +78,5 @@ export async function asUser<T = Record<string, unknown>>(
 
 export const user = (userId: string): Actor => ({ role: "authenticated", userId });
 export const ANON: Actor = { role: "anon" };
+/** The server's secret key: bypasses RLS, but not grants. */
+export const SERVICE: Actor = { role: "service_role" };

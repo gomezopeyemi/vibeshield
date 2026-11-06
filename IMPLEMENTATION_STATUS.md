@@ -47,8 +47,33 @@ queue are now driven by real scanner output._
 **Not verified**
 - Signed-in UI with real workspaces: needs the two migrations applied to `zwowuzkxgsvpfcymysca` and a verified account. Switcher, dialog and Settings were not checked in a browser.
 
-**Next slices**
-3. Scans, scan events, findings, score snapshots (workspace-owned) + move scan storage off memory; retire `vs_scans`.
+### Slice 3 — workspace-owned scan history (code complete, 2026-11-06 · live check blocked on applying migrations + secret key)
+
+**Built**
+- Migration `20261106000100_scans.sql`: `scans`, `findings`, `scan_events`, `score_snapshots`, all keyed by `workspace_id`. Child rows reference `(workspace_id, scan_id)`, so a finding can't claim another workspace's scan. Deleting a workspace removes its history; deleting an account keeps its scans (`created_by` → null).
+- **Members read, nobody writes.** RLS lets every member (viewers included) read their workspace's history; `authenticated` has `SELECT` only, so no user can forge a scan or a score, owners included. Results are written by `public.record_scan(jsonb)`, executable only by `service_role`. It re-checks that the author is an owner/admin/developer and writes scan + findings + events + snapshot in one transaction.
+- Score snapshots store `formula_version` (`SCORE_FORMULA_VERSION` in `lib/scanner.ts`, ADR-008). Only a completed scan gets a snapshot; a failed scan never reads as a score.
+- `lib/supabase/admin.ts`: server-only secret-key client (`SUPABASE_SECRET_KEY`, legacy name `SUPABASE_SERVICE_ROLE_KEY` accepted); a publishable key in that slot is detected and refused. Used only for `record_scan`.
+- `lib/scan-scope.ts`: the current workspace (from the RLS-verified context) and whether the user may scan. Scan routes return **403 `forbidden`** to viewers, and the onboarding and Re-scan buttons are disabled for them with an explanation.
+- `lib/scan-store.ts` rewritten. Reads go through the user's session (RLS). Lists carry summaries only, and findings/events load per scan. **A failed read throws** and pages say "couldn't be loaded" instead of "no scans yet"; a missing table names the migration to apply. Writes that can't reach the database (no workspace tables, no secret key, write error) fall back to memory, **scoped to the workspace / user**, with the reason shown. Each scan carries `persisted`, so "Not saved" banners are per scan.
+- The legacy `vs_scans` code path is gone. The old table still exists in the *old* project (`kowvnkydqqiaezqqejfr`, not this app's database) and can be dropped there.
+
+**Verified**
+- 14 DB tests (PGlite): anon locked out; no user can insert/update/delete or call `record_scan`; atomic write; viewers/outsiders/null author refused with nothing written; bad finding rolls back the whole scan; no snapshot for failed scans; repeated finding hashes kept; members (incl. viewers) read, outsiders see nothing; personal workspaces private; child rows pinned to their workspace; removed members lose access; cascade + author deletion.
+- Mutation check (SQL): viewer allowed to scan, `authenticated` granted `record_scan`, always-true read policy, child FK without workspace, snapshot for failed scans. **Each is caught.**
+- 15 app tests: payload sent to `record_scan` (workspace, author, formula version, no score unless completed); every fallback and its reason; non-workspace scopes never hit the DB; **full round trip through the PostgREST row shape returns the identical scan**; reads are filtered to the current workspace; read errors and malformed rows throw; the data layer reports them as unavailable; the missing-migration message; viewers get 403 from both routes before the scanner runs.
+- Mutation check (TS): always sending a score, dropping the workspace filter, swallowing read errors, unscoped memory, no viewer guard on the stream, ignoring `durable`. **Each is caught.**
+- Gates: typecheck ✓ · lint ✓ · **147 tests** ✓ (14 files) · build ✓. No secret-key name, `record_scan` or `sb_secret_` string in the client bundle. Production server: public 200, app pages 307 → login, API 401. The live project returns `PGRST205` for `scans` (not applied yet).
+
+**Not verified**
+- Nothing against the hosted database: the three migrations aren't applied to `zwowuzkxgsvpfcymysca` and no secret key is set, so every scan there still lands in memory (and says so). Not checked in a browser.
+
+**To turn it on**
+1. SQL Editor: run, in order, `20261101000100_identity_workspaces.sql`, `20261105000100_backfill_and_profile_link.sql`, `20261106000100_scans.sql`.
+2. Project Settings → API Keys → create a **secret** key; put it in `.env.local` as `SUPABASE_SECRET_KEY=` (never `NEXT_PUBLIC_`, never committed). Restart the dev server.
+3. Run a scan, then restart the server: `/scans` should say "History is saved to this workspace" and still list it.
+
+**Next slice**
 4. Invitations and member management (role changes, removal), audit log, Realtime for scan events.
 
 ## Stage 1 — Public site & authentication (CODE COMPLETE, 2026-10-31 · live verification pending)
@@ -102,7 +127,7 @@ A real sign-up succeeded, but `/auth/confirm?code=…` failed → `/login?error=
 - To enable: Google Cloud Console → OAuth client (Web) with redirect `https://zwowuzkxgsvpfcymysca.supabase.co/auth/v1/callback`, then Supabase → Authentication → Sign In / Providers → Google: paste client ID + secret. The button then appears by itself.
 
 **Known gaps carried forward**
-- Workspaces, roles and durable per-user scan storage are Stage 2. The legacy `vs_scans` table has no `owner_id` and does not exist in the new project, so scan history stays in server memory (labelled "not durable") until then.
+- Workspaces, roles and durable scan storage: built in Stage 2 slices 1–3 (see above), pending application to the live project.
 - Profile editing, account deletion, sessions list → Stage 11. Default Supabase email sender is rate-limited; custom SMTP before launch (D3).
 - `PLANS` (Team) lists "SSO & audit exports" and "Priority remediation", which the roadmap doesn't specify; review before launch.
 - FinOps/Database/Smoke/Context pages still show labelled fixtures to every account (Stages 7/8).

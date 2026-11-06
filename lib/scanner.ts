@@ -20,8 +20,6 @@ import type { FileEntry, RepoSource, SourceInfo } from "./source";
 
 export interface ScanResult {
   scanId: string;
-  /** Account that ran the scan; set by saveScan. Scans are only ever read back by their owner. */
-  ownerId?: string;
   source: SourceInfo;
   status: ScanStatus;
   startedAt: string;
@@ -426,6 +424,9 @@ const PILLAR_WEIGHT: Record<Pillar, number> = {
   revenue: 0.25,
   "code-health": 0.15,
 };
+
+/** Stored with every score snapshot; bump when PENALTY, the floor or the weights change. */
+export const SCORE_FORMULA_VERSION = "static-rules-v1";
 
 export function score(findings: Finding[]): { score: number; pillars: Record<Pillar, number> } {
   const pillars = {} as Record<Pillar, number>;

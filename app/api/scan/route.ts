@@ -1,9 +1,10 @@
 import { z } from "zod";
-import { parse, ok, fail } from "@/lib/api";
+import { parse, ok, fail, cannotScan } from "@/lib/api";
 import { sampleSource, githubSource } from "@/lib/source";
 import { runScan } from "@/lib/scanner";
 import { saveScan } from "@/lib/scan-store";
 import { requireApiUser } from "@/lib/auth/session";
+import { getScanScope } from "@/lib/scan-scope";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,8 @@ const schema = z.object({
 export async function POST(req: Request) {
   const user = await requireApiUser();
   if (user instanceof Response) return user;
+  const scope = await getScanScope();
+  if (!scope.canScan) return cannotScan();
   const parsed = await parse(req, schema);
   if ("error" in parsed) return parsed.error;
   const { target = "sample", repo, branch = "main" } = parsed.data;
@@ -38,8 +41,10 @@ export async function POST(req: Request) {
     });
   }
 
-  const store = await saveScan(result, user.id);
-  return ok({ persisted: store.persisted, storage: store.mode,
+  const store = await saveScan(result, scope);
+  return ok({
+    persisted: store.persisted,
+    storage: store.mode,
     scanId: result.scanId,
     score: result.score,
     findingCount: result.findings.length,

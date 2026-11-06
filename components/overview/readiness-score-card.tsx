@@ -13,7 +13,8 @@ import { timeAgo } from "@/lib/utils";
 
 export function ReadinessScoreCard({ readiness }: { readiness: ReadinessState }) {
   const { run, status, response } = useAction("/api/scan");
-  const { repository } = useSession();
+  const { repository, workspace } = useSession();
+  const canScan = workspace.role !== "viewer";
   const router = useRouter();
   const repositoryId = repository?.id ?? "";
   const delta =
@@ -31,7 +32,8 @@ export function ReadinessScoreCard({ readiness }: { readiness: ReadinessState })
         <Button
           size="sm"
           variant="secondary"
-          disabled={status === "pending"}
+          disabled={status === "pending" || !canScan}
+          title={canScan ? undefined : "Viewers can't run scans"}
           onClick={async () => {
             const res = await run({ repositoryId, target: "sample" });
             if (res.ok) router.refresh();

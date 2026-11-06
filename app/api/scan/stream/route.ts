@@ -2,6 +2,8 @@ import { sampleSource, githubSource } from "@/lib/source";
 import { runScan } from "@/lib/scanner";
 import { saveScan } from "@/lib/scan-store";
 import { requireApiUser } from "@/lib/auth/session";
+import { getScanScope } from "@/lib/scan-scope";
+import { cannotScan } from "@/lib/api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +14,8 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const user = await requireApiUser();
   if (user instanceof Response) return user;
+  const scope = await getScanScope();
+  if (!scope.canScan) return cannotScan();
   const url = new URL(req.url);
   const target = url.searchParams.get("target") ?? "sample";
   const repo = url.searchParams.get("repo") ?? "";
@@ -34,7 +38,7 @@ export async function GET(req: Request) {
         const result = await runScan(source, (e) => send({ type: "event", event: e }), {
           pace: true,
         });
-        const store = result.status === "completed" ? await saveScan(result, user.id) : null;
+        const store = result.status === "completed" ? await saveScan(result, scope) : null;
         send({
           type: "result",
           result: {

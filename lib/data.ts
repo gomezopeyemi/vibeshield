@@ -36,11 +36,15 @@ import { DEMO_INTEGRATIONS } from "./demo/session";
 import {
   listRuns,
   getRun,
+  latestCompletedRun,
   readinessFromRuns,
-  findingsFromRuns,
   resultToScan,
   storeStatus,
+  ScanHistoryUnavailable,
+  type ScanSummary,
+  type StoredScan,
 } from "./scan-store";
+import { getScanScope, type ScanScope } from "./scan-scope";
 import {
   DEMO_RATE_LIMIT,
   DEMO_FINOPS_SIGNALS,
@@ -71,12 +75,24 @@ import {
  * -------------------------------------------------------------------------- */
 
 /** Honest storage note: live data from memory is not durable and must say so. */
-function storeNote(): string | undefined {
-  const st = storeStatus();
-  if (st.persisted) return undefined;
-  return st.error
-    ? `Scan history could not be saved to Supabase (${st.error}). Showing scans held in server memory only.`
-    : "Scan history is held in server memory only — it is not durable. Configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to keep it.";
+function storeNote(scope: ScanScope, runs: ScanSummary[]): string | undefined {
+  const st = storeStatus(scope);
+  if (st.persisted && runs.every((r) => r.persisted)) return undefined;
+  return st.reason ?? "Some of these scans are held in server memory only and will be lost when the server restarts.";
+}
+
+/** The scope's scans plus the newest completed one in full, or why they
+ * couldn't be read (which callers must never present as "no scans"). */
+async function loadHistory(
+  scope: ScanScope,
+): Promise<{ runs: ScanSummary[]; latest: StoredScan | null; failure?: undefined } | { failure: string }> {
+  try {
+    const runs = await listRuns(scope);
+    return { runs, latest: await latestCompletedRun(scope, runs) };
+  } catch (err) {
+    if (err instanceof ScanHistoryUnavailable) return { failure: err.message };
+    throw err;
+  }
 }
 
 function demo<T>(data: T, lastUpdatedAt?: string, note?: string): DataEnvelope<T> {
@@ -89,18 +105,21 @@ function unavailable<T>(data: T, note: string): DataEnvelope<T> {
 /** Demo fixtures go only to the fixture session (auth not configured) in a
  * development/demo deployment with live mode off, and never beside real scans.
  * Real accounts always get their own data or an honest empty state. */
-async function demoServable(user: SessionUser): Promise<boolean> {
+async function demoServable(user: SessionUser, runs?: ScanSummary[]): Promise<boolean> {
   if (!user.demo || !DEMO_ALLOWED || LIVE_MODE) return false;
-  return (await listRuns(user.id)).length === 0;
+  return (runs ?? (await listRuns(await getScanScope()))).length === 0;
 }
 
 export async function getReadiness(): Promise<DataEnvelope<ReadinessState>> {
   const user = await requireUser();
-  const live = readinessFromRuns(await listRuns(user.id));
+  const scope = await getScanScope();
+  const history = await loadHistory(scope);
+  if (history.failure !== undefined) return unavailable(emptyReadiness(), history.failure);
+  const live = readinessFromRuns(history.runs, history.latest);
   if (live) {
-    return { origin: "live", data: live, lastUpdatedAt: formatTime(live.lastScanAt!), note: storeNote() };
+    return { origin: "live", data: live, lastUpdatedAt: formatTime(live.lastScanAt!), note: storeNote(scope, history.runs) };
   }
-  if (!(await demoServable(user))) {
+  if (!(await demoServable(user, history.runs))) {
     return unavailable(emptyReadiness(), "No completed scan yet. Run a scan to compute your Launch Readiness Score.");
   }
   return demo(DEMO_READINESS, formatTime(DEMO_READINESS.lastScanAt!));
@@ -108,11 +127,12 @@ export async function getReadiness(): Promise<DataEnvelope<ReadinessState>> {
 
 export async function getFindings(): Promise<DataEnvelope<Finding[]>> {
   const user = await requireUser();
-  const live = findingsFromRuns(await listRuns(user.id));
-  if (live.length > 0) {
-    return { origin: "live", data: live };
+  const history = await loadHistory(await getScanScope());
+  if (history.failure !== undefined) return unavailable([], history.failure);
+  if (history.latest) {
+    return { origin: "live", data: history.latest.findings };
   }
-  if (!(await demoServable(user))) {
+  if (!(await demoServable(user, history.runs))) {
     return unavailable([], "No findings yet. Run a scan to see results.");
   }
   return demo(DEMO_FINDINGS);
@@ -120,18 +140,27 @@ export async function getFindings(): Promise<DataEnvelope<Finding[]>> {
 
 export async function getFinding(id: string): Promise<Finding | null> {
   const user = await requireUser();
-  const live = findingsFromRuns(await listRuns(user.id)).find((f) => f.id === id);
+  const history = await loadHistory(await getScanScope());
+  if (history.failure !== undefined) return null;
+  const live = history.latest?.findings.find((f) => f.id === id);
   if (live) return live;
-  return (await demoServable(user)) ? (DEMO_FINDINGS.find((f) => f.id === id) ?? null) : null;
+  return (await demoServable(user, history.runs)) ? (DEMO_FINDINGS.find((f) => f.id === id) ?? null) : null;
 }
 
 export async function getScans(): Promise<DataEnvelope<Scan[]>> {
   const user = await requireUser();
-  const runs = await listRuns(user.id);
-  if (runs.length > 0) {
-    return { origin: "live", data: runs.map(resultToScan), note: storeNote() };
+  const scope = await getScanScope();
+  let runs: ScanSummary[];
+  try {
+    runs = await listRuns(scope);
+  } catch (err) {
+    if (err instanceof ScanHistoryUnavailable) return unavailable([], err.message);
+    throw err;
   }
-  if (!(await demoServable(user))) {
+  if (runs.length > 0) {
+    return { origin: "live", data: runs.map(resultToScan), note: storeNote(scope, runs) };
+  }
+  if (!(await demoServable(user, runs))) {
     return unavailable([], "No scans yet. Run your first scan.");
   }
   return demo(DEMO_SCANS);
@@ -139,7 +168,13 @@ export async function getScans(): Promise<DataEnvelope<Scan[]>> {
 
 export async function getScanEvents(scanId: string): Promise<DataEnvelope<ScanEvent[]>> {
   const user = await requireUser();
-  const run = await getRun(scanId, user.id);
+  let run: StoredScan | null;
+  try {
+    run = await getRun(scanId, await getScanScope());
+  } catch (err) {
+    if (err instanceof ScanHistoryUnavailable) return unavailable([], err.message);
+    throw err;
+  }
   if (run) return { origin: "live", data: run.events };
   if (!(await demoServable(user))) {
     return unavailable([], "Events for this scan are not available.");

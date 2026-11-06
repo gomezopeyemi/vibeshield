@@ -46,9 +46,11 @@ function Step({ n, title, done, children }: { n: number; title: string; done?: b
 export function ConnectPanel({
   onStart,
   scanning,
+  canScan = true,
 }: {
   onStart: () => void;
   scanning: boolean;
+  canScan?: boolean;
 }) {
   const { repositories, repository, setRepository } = useSession();
   const connectedRepos = repositories.filter((r) => r.connection === "connected");
@@ -171,7 +173,7 @@ export function ConnectPanel({
           variant="primary"
           size="lg"
           className="w-full"
-          disabled={!repoId || !liveValid || !stagingValid || scanning}
+          disabled={!repoId || !liveValid || !stagingValid || scanning || !canScan}
           onClick={onStart}
         >
           {scanning ? (
